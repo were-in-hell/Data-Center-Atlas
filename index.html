@@ -4,657 +4,555 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Global Data Center Atlas</title>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
-
 <style>
 :root {
-  --bg:      #0b0f1a;
-  --panel:   rgba(11,15,26,0.92);
-  --border:  rgba(0,212,255,0.18);
-  --cyan:    #00d4ff;
-  --green:   #00ff88;
-  --amber:   #fbbf24;
-  --red:     #f87171;
-  --text:    #c8d6e5;
-  --muted:   #5a7085;
-  --mono:    'IBM Plex Mono', monospace;
-  --sans:    'IBM Plex Sans', sans-serif;
+  --bg:    #0b0f1a;
+  --panel: rgba(11,15,26,0.92);
+  --bdr:   rgba(0,212,255,0.18);
+  --cyan:  #00d4ff;
+  --green: #00ff88;
+  --amber: #fbbf24;
+  --red:   #f87171;
+  --text:  #c8d6e5;
+  --muted: #5a7085;
+  --mono:  'IBM Plex Mono', monospace;
+  --sans:  'IBM Plex Sans', sans-serif;
 }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);font-family:var(--sans);color:var(--text);height:100vh;overflow:hidden}
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); font-family: var(--sans); color: var(--text); height: 100vh; overflow: hidden; }
+/* ── Header ──────────────────────────────────────────────────────── */
+#header{
+  position:fixed;top:0;left:0;right:0;height:52px;
+  background:var(--panel);border-bottom:1px solid var(--bdr);
+  display:flex;align-items:center;padding:0 20px;gap:16px;
+  z-index:1000;backdrop-filter:blur(12px)
+}
+#header-title{
+  font-family:var(--mono);font-size:13px;font-weight:700;
+  letter-spacing:.18em;color:var(--cyan);text-transform:uppercase;
+  display:flex;align-items:center;gap:10px
+}
+.pulse-dot{
+  width:7px;height:7px;background:var(--green);border-radius:50%;
+  box-shadow:0 0 8px var(--green);animation:pulse 2s ease-in-out infinite
+}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 8px var(--green)}50%{opacity:.4;box-shadow:0 0 2px var(--green)}}
+#header-count{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto}
+#header-count span{color:var(--cyan)}
 
-/* ── Header ──────────────────────────────────────────────────────────── */
-#header {
-  position: fixed; top: 0; left: 0; right: 0; height: 52px;
-  background: var(--panel); border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; padding: 0 20px; gap: 16px;
-  z-index: 1000; backdrop-filter: blur(12px);
+/* ── Search ──────────────────────────────────────────────────────── */
+#search-wrap{
+  display:flex;align-items:center;background:rgba(255,255,255,.04);
+  border:1px solid var(--bdr);border-radius:6px;padding:0 10px;
+  height:32px;gap:6px;flex:0 0 260px
 }
-#header-title {
-  font-family: var(--mono); font-size: 13px; font-weight: 700;
-  letter-spacing: .18em; color: var(--cyan); text-transform: uppercase;
-  display: flex; align-items: center; gap: 10px;
-}
-.pulse-dot {
-  width: 7px; height: 7px; background: var(--green); border-radius: 50%;
-  box-shadow: 0 0 8px var(--green); animation: pulse 2s ease-in-out infinite;
-}
-@keyframes pulse { 0%,100%{opacity:1;box-shadow:0 0 8px var(--green)} 50%{opacity:.4;box-shadow:0 0 2px var(--green)} }
-#header-count { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; }
-#header-count span { color: var(--cyan); }
+#search-wrap svg{color:var(--muted);flex-shrink:0}
+#search{background:none;border:none;outline:none;font-family:var(--mono);font-size:11px;color:var(--text);width:100%}
+#search::placeholder{color:var(--muted)}
+#clear-btn{cursor:pointer;color:var(--muted);font-size:14px;background:none;border:none;padding:0;display:none}
+#clear-btn:hover{color:var(--text)}
 
-/* ── Search ──────────────────────────────────────────────────────────── */
-#search-wrap {
-  display: flex; align-items: center;
-  background: rgba(255,255,255,.04); border: 1px solid var(--border);
-  border-radius: 6px; padding: 0 10px; height: 32px; gap: 6px; flex: 0 0 260px;
-}
-#search-wrap svg { color: var(--muted); flex-shrink: 0; }
-#search { background: none; border: none; outline: none; font-family: var(--mono); font-size: 11px; color: var(--text); width: 100%; }
-#search::placeholder { color: var(--muted); }
-#clear-btn { cursor: pointer; color: var(--muted); font-size: 14px; background: none; border: none; padding: 0; display: none; }
-#clear-btn:hover { color: var(--text); }
+/* ── Globe ───────────────────────────────────────────────────────── */
+#globe{position:fixed;top:52px;left:0;right:0;bottom:0}
 
-/* ── Map ─────────────────────────────────────────────────────────────── */
-#map { position: fixed; top: 52px; left: 0; right: 0; bottom: 0; }
+/* ── Side panel ──────────────────────────────────────────────────── */
+#panel{
+  position:fixed;top:62px;left:12px;width:250px;
+  background:var(--panel);border:1px solid var(--bdr);border-radius:10px;
+  padding:14px;z-index:900;backdrop-filter:blur(12px);
+  display:flex;flex-direction:column;gap:12px;
+  max-height:calc(100vh - 80px);overflow-y:auto
+}
+#panel::-webkit-scrollbar{width:4px}
+#panel::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px}
+.panel-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-bottom:7px}
+.tier-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.tier-label{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text)}
+.tier-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tier-count{font-family:var(--mono);font-size:11px;color:var(--muted)}
+#country-select{
+  width:100%;background:rgba(255,255,255,.04);border:1px solid var(--bdr);
+  border-radius:6px;color:var(--text);font-family:var(--mono);font-size:11px;
+  padding:6px 8px;outline:none;cursor:pointer
+}
+#country-select option{background:#0b0f1a}
+.panel-divider{border:none;border-top:1px solid var(--bdr)}
+#reset-btn{
+  background:none;border:1px solid var(--bdr);border-radius:6px;
+  color:var(--muted);font-family:var(--mono);font-size:10px;
+  letter-spacing:.1em;padding:5px 10px;cursor:pointer;width:100%;
+  text-transform:uppercase;transition:all .2s
+}
+#reset-btn:hover{color:var(--cyan);border-color:var(--cyan)}
+#result-info{font-family:var(--mono);font-size:10px;color:var(--amber);display:none}
 
-/* ── Side panel ──────────────────────────────────────────────────────── */
-#panel {
-  position: fixed; top: 62px; left: 12px; width: 250px;
-  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-  padding: 14px; z-index: 900; backdrop-filter: blur(12px);
-  display: flex; flex-direction: column; gap: 12px;
-  max-height: calc(100vh - 80px); overflow-y: auto;
+/* ── Spec filters ────────────────────────────────────────────────── */
+#spec-toggle{
+  background:none;border:none;color:var(--muted);font-family:var(--mono);
+  font-size:9px;letter-spacing:.15em;text-transform:uppercase;
+  cursor:pointer;display:flex;align-items:center;gap:5px;padding:0
 }
-#panel::-webkit-scrollbar { width: 4px; }
-#panel::-webkit-scrollbar-track { background: transparent; }
-#panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+#spec-toggle:hover{color:var(--cyan)}
+#spec-toggle .arrow{transition:transform .2s}
+#spec-toggle.open .arrow{transform:rotate(90deg)}
+#spec-panel{display:none}
+#spec-panel.open{display:block}
+.spec-filter{margin-bottom:10px}
+.spec-filter-label{font-size:11px;color:var(--text);margin-bottom:5px;display:flex;align-items:center;gap:6px}
+.spec-filter-label .unit{font-family:var(--mono);font-size:9px;color:var(--muted)}
+.coverage-badge{font-family:var(--mono);font-size:9px;border-radius:3px;padding:1px 5px;margin-left:auto;flex-shrink:0}
+.coverage-badge.low   {background:rgba(248,113,113,.12);color:var(--red)}
+.coverage-badge.medium{background:rgba(251,191,36,.12); color:var(--amber)}
+.coverage-badge.high  {background:rgba(0,255,136,.12);  color:var(--green)}
+.spec-note{font-size:10px;color:var(--muted);line-height:1.5;margin-bottom:10px;padding:7px 9px;background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.15);border-radius:6px}
+.range-row{display:flex;align-items:center;gap:5px}
+.range-input{
+  flex:1;background:rgba(255,255,255,.04);border:1px solid var(--bdr);
+  border-radius:5px;color:var(--text);font-family:var(--mono);font-size:10px;
+  padding:4px 6px;outline:none;width:0;min-width:0
+}
+.range-input:focus{border-color:var(--cyan)}
+.range-input::placeholder{color:var(--muted)}
+.range-sep{font-family:var(--mono);font-size:10px;color:var(--muted);flex-shrink:0}
+.require-row{display:flex;align-items:center;gap:5px;margin-top:4px;font-size:10px;color:var(--muted);cursor:pointer}
+.require-row input{accent-color:var(--cyan);cursor:pointer}
 
-.panel-section-label {
-  font-family: var(--mono); font-size: 9px; letter-spacing: .2em;
-  color: var(--muted); text-transform: uppercase; margin-bottom: 7px;
+/* ── Popup overlay ───────────────────────────────────────────────── */
+#popup{
+  position:fixed;z-index:850;display:none;
+  min-width:300px;max-width:360px;
+  background:#0d1520;border:1px solid var(--bdr);border-radius:10px;
+  box-shadow:0 8px 40px rgba(0,0,0,.85);
+  max-height:calc(100vh - 80px);overflow-y:auto
 }
-.tier-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.tier-label { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text); }
-.tier-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.tier-count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+#popup::-webkit-scrollbar{width:4px}
+#popup::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px}
+.popup-close{
+  position:absolute;top:8px;right:10px;
+  background:none;border:none;color:var(--muted);font-size:18px;
+  cursor:pointer;line-height:1;z-index:1;padding:2px 6px;border-radius:4px
+}
+.popup-close:hover{color:var(--text);background:rgba(255,255,255,.06)}
+.popup-images{display:grid;grid-template-columns:1fr 1fr;gap:1px;border-radius:10px 10px 0 0;overflow:hidden;height:130px}
+.popup-images.single{grid-template-columns:1fr}
+.popup-img-wrap{position:relative;overflow:hidden;background:#060b18}
+.popup-img-wrap img{width:100%;height:100%;object-fit:cover;transition:opacity .3s;opacity:0}
+.popup-img-wrap img.loaded{opacity:1}
+.popup-img-label{
+  position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(transparent,rgba(0,0,0,.75));
+  font-family:var(--mono);font-size:8px;letter-spacing:.1em;
+  color:rgba(255,255,255,.7);padding:14px 7px 5px;text-transform:uppercase
+}
+.popup-img-placeholder{
+  width:100%;height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:5px;
+  font-family:var(--mono);font-size:9px;color:var(--muted);
+  letter-spacing:.1em;text-decoration:none;transition:color .2s
+}
+.popup-img-placeholder:hover{color:var(--cyan)}
+.popup-img-placeholder svg{opacity:.3}
+.popup-header{padding:12px 36px 8px 14px;border-bottom:1px solid var(--bdr)}
+.popup-name{font-size:13px;font-weight:500;color:#fff;line-height:1.4;margin-bottom:3px}
+.popup-country{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.08em}
+.popup-body{padding:9px 14px 13px}
+.popup-row{display:flex;gap:8px;font-size:11px;margin-bottom:5px;line-height:1.5}
+.popup-row-lbl{font-family:var(--mono);color:var(--muted);flex-shrink:0;padding-top:1px}
+.popup-row-val{color:var(--text);word-break:break-word}
+.popup-divider{border:none;border-top:1px solid var(--bdr);margin:7px 0}
+.popup-stats{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px}
+.popup-chip{font-family:var(--mono);font-size:10px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);border-radius:4px;padding:2px 6px;color:var(--cyan)}
+.popup-desc{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:9px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.popup-actions{display:flex;gap:8px;flex-wrap:wrap}
+.popup-link,.popup-sv-btn{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;text-decoration:none;letter-spacing:.06em;text-transform:uppercase;border-radius:5px;padding:4px 9px;transition:all .2s}
+.popup-link{color:var(--cyan);border:1px solid rgba(0,212,255,.25);background:rgba(0,212,255,.06)}
+.popup-link:hover{background:rgba(0,212,255,.14);border-color:var(--cyan)}
+.popup-sv-btn{color:#34d399;border:1px solid rgba(52,211,153,.25);background:rgba(52,211,153,.06)}
+.popup-sv-btn:hover{background:rgba(52,211,153,.14);border-color:#34d399}
+.tier-badge{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:.1em;border-radius:3px;padding:1px 5px;text-transform:uppercase;margin-left:6px;vertical-align:middle}
+.tier-badge.address{background:rgba(0,255,136,.12);color:var(--green)}
+.tier-badge.city   {background:rgba(251,191,36,.12);color:var(--amber)}
+.tier-badge.country{background:rgba(248,113,113,.12);color:var(--red)}
 
-/* Country filter */
-#country-select {
-  width: 100%; background: rgba(255,255,255,.04); border: 1px solid var(--border);
-  border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 11px;
-  padding: 6px 8px; outline: none; cursor: pointer;
+/* ── Hover tooltip ───────────────────────────────────────────────── */
+#tooltip{
+  position:fixed;z-index:900;display:none;pointer-events:none;
+  background:rgba(11,15,26,.95);border:1px solid var(--bdr);border-radius:6px;
+  font-family:var(--mono);font-size:10px;color:var(--text);
+  padding:5px 9px;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  backdrop-filter:blur(8px)
 }
-#country-select option { background: #0b0f1a; }
-
-/* Specs filters */
-.spec-filter { margin-bottom: 10px; }
-.spec-filter-label {
-  font-size: 11px; color: var(--text); margin-bottom: 5px; display: flex;
-  align-items: center; gap: 6px;
-}
-.spec-filter-label span { font-family: var(--mono); font-size: 9px; color: var(--muted); }
-.coverage-badge {
-  font-family: var(--mono); font-size: 9px; border-radius: 3px; padding: 1px 5px;
-  margin-left: auto; flex-shrink: 0;
-}
-.coverage-badge.low    { background: rgba(248,113,113,.12); color: var(--red); }
-.coverage-badge.medium { background: rgba(251,191,36,.12);  color: var(--amber); }
-.coverage-badge.high   { background: rgba(0,255,136,.12);   color: var(--green); }
-.spec-note {
-  font-size: 10px; color: var(--muted); line-height: 1.5; margin-bottom: 10px;
-  padding: 7px 9px; background: rgba(251,191,36,.06);
-  border: 1px solid rgba(251,191,36,.15); border-radius: 6px;
-}
-.range-row { display: flex; align-items: center; gap: 5px; }
-.range-input {
-  flex: 1; background: rgba(255,255,255,.04); border: 1px solid var(--border);
-  border-radius: 5px; color: var(--text); font-family: var(--mono); font-size: 10px;
-  padding: 4px 6px; outline: none; width: 0; min-width: 0;
-}
-.range-input:focus { border-color: var(--cyan); }
-.range-input::placeholder { color: var(--muted); }
-.range-sep { font-family: var(--mono); font-size: 10px; color: var(--muted); flex-shrink: 0; }
-.require-data-row {
-  display: flex; align-items: center; gap: 5px; margin-top: 4px;
-  font-size: 10px; color: var(--muted); cursor: pointer;
-}
-.require-data-row input[type=checkbox] { accent-color: var(--cyan); cursor: pointer; }
-
-/* Divider */
-.panel-divider { border: none; border-top: 1px solid var(--border); }
-
-/* Buttons */
-#reset-btn {
-  background: none; border: 1px solid var(--border); border-radius: 6px;
-  color: var(--muted); font-family: var(--mono); font-size: 10px;
-  letter-spacing: .1em; padding: 5px 10px; cursor: pointer; width: 100%;
-  text-transform: uppercase; transition: all .2s;
-}
-#reset-btn:hover { color: var(--cyan); border-color: var(--cyan); }
-#result-info { font-family: var(--mono); font-size: 10px; color: var(--amber); display: none; }
-
-/* Spec toggle button */
-#spec-toggle {
-  background: none; border: none; color: var(--muted); font-family: var(--mono);
-  font-size: 9px; letter-spacing: .15em; text-transform: uppercase; cursor: pointer;
-  display: flex; align-items: center; gap: 5px; padding: 0;
-}
-#spec-toggle:hover { color: var(--cyan); }
-#spec-toggle .arrow { transition: transform .2s; }
-#spec-toggle.open .arrow { transform: rotate(90deg); }
-#spec-panel { display: none; }
-#spec-panel.open { display: block; }
-
-/* ── Cluster icons ───────────────────────────────────────────────────── */
-.custom-cluster { background: transparent !important; border: none !important; }
-.cluster-inner {
-  background: rgba(0,212,255,.12); border: 1.5px solid rgba(0,212,255,.5); border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--mono); font-weight: 700; color: var(--cyan);
-}
-
-/* ── Popup ───────────────────────────────────────────────────────────── */
-.leaflet-popup-content-wrapper {
-  background: #0d1520; border: 1px solid var(--border); border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.6); padding: 0; min-width: 300px; max-width: 360px;
-}
-.leaflet-popup-content { margin: 0; }
-.leaflet-popup-tip { background: #0d1520; }
-.leaflet-popup-close-button { color: var(--muted) !important; font-size: 16px !important; top: 8px !important; right: 8px !important; }
-.leaflet-popup-close-button:hover { color: var(--text) !important; }
-
-/* Popup image strip */
-.popup-images {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
-  border-radius: 10px 10px 0 0; overflow: hidden; height: 130px;
-}
-.popup-images.single { grid-template-columns: 1fr; }
-.popup-img-wrap {
-  position: relative; overflow: hidden; background: #060b18; cursor: pointer;
-}
-.popup-img-wrap img {
-  width: 100%; height: 100%; object-fit: cover;
-  transition: opacity .2s; opacity: 0;
-}
-.popup-img-wrap img.loaded { opacity: 1; }
-.popup-img-label {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  background: linear-gradient(transparent, rgba(0,0,0,.7));
-  font-family: var(--mono); font-size: 8px; letter-spacing: .1em;
-  color: rgba(255,255,255,.7); padding: 12px 6px 5px; text-transform: uppercase;
-}
-.popup-img-placeholder {
-  width: 100%; height: 100%; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 4px;
-  font-family: var(--mono); font-size: 9px; color: var(--muted);
-  letter-spacing: .1em; text-decoration: none;
-}
-.popup-img-placeholder svg { opacity: .3; }
-.popup-img-placeholder:hover { color: var(--cyan); }
-.popup-img-placeholder:hover svg { opacity: .6; }
-
-.popup-header { padding: 12px 14px 8px; border-bottom: 1px solid var(--border); }
-.popup-name { font-family: var(--sans); font-size: 13px; font-weight: 500; color: #fff; line-height: 1.4; margin-bottom: 3px; }
-.popup-country { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: .08em; }
-.popup-body { padding: 9px 14px 12px; }
-.popup-row { display: flex; gap: 8px; font-size: 11px; margin-bottom: 5px; line-height: 1.5; }
-.popup-row-label { font-family: var(--mono); color: var(--muted); flex-shrink: 0; padding-top: 1px; }
-.popup-row-value { color: var(--text); word-break: break-word; }
-.popup-divider { border: none; border-top: 1px solid var(--border); margin: 7px 0; }
-.popup-stats { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 7px; }
-.popup-stat-chip {
-  font-family: var(--mono); font-size: 10px;
-  background: rgba(0,212,255,.08); border: 1px solid rgba(0,212,255,.2);
-  border-radius: 4px; padding: 2px 6px; color: var(--cyan);
-}
-.popup-desc {
-  font-size: 11px; color: var(--muted); line-height: 1.6; margin-bottom: 9px;
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-}
-.popup-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.popup-link, .popup-sv-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-family: var(--mono); font-size: 10px; text-decoration: none;
-  letter-spacing: .06em; text-transform: uppercase;
-  border-radius: 5px; padding: 4px 9px; transition: all .2s;
-}
-.popup-link {
-  color: var(--cyan); border: 1px solid rgba(0,212,255,.25);
-  background: rgba(0,212,255,.06);
-}
-.popup-link:hover { background: rgba(0,212,255,.14); border-color: var(--cyan); }
-.popup-sv-btn {
-  color: #34d399; border: 1px solid rgba(52,211,153,.25);
-  background: rgba(52,211,153,.06);
-}
-.popup-sv-btn:hover { background: rgba(52,211,153,.14); border-color: #34d399; }
-
-.tier-badge {
-  display: inline-block; font-family: var(--mono); font-size: 9px;
-  letter-spacing: .1em; border-radius: 3px; padding: 1px 5px;
-  text-transform: uppercase; margin-left: 6px; vertical-align: middle;
-}
-.tier-badge.address { background: rgba(0,255,136,.12); color: var(--green); }
-.tier-badge.city    { background: rgba(251,191,36,.12); color: var(--amber); }
-.tier-badge.country { background: rgba(248,113,113,.12); color: var(--red); }
-
-/* ── Leaflet overrides ───────────────────────────────────────────────── */
-.leaflet-control-zoom { border: 1px solid var(--border) !important; border-radius: 8px !important; overflow: hidden; }
-.leaflet-control-zoom a { background: var(--panel) !important; color: var(--text) !important; border-bottom: 1px solid var(--border) !important; }
-.leaflet-control-zoom a:hover { background: rgba(0,212,255,.1) !important; }
-.leaflet-control-attribution { background: rgba(11,15,26,.7) !important; color: var(--muted) !important; font-size: 9px !important; backdrop-filter: blur(6px); }
-.leaflet-control-attribution a { color: var(--muted) !important; }
 </style>
 </head>
 <body>
 
-<!-- Header -->
 <header id="header">
   <div id="header-title">
     <div class="pulse-dot"></div>
     Global Data Center Atlas
   </div>
   <div id="search-wrap">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-    </svg>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input id="search" type="text" placeholder="Search name, country, address…" autocomplete="off"/>
-    <button id="clear-btn" title="Clear">✕</button>
+    <button id="clear-btn">✕</button>
   </div>
   <div id="header-count">Loading…</div>
 </header>
 
-<div id="map"></div>
-
-<!-- Side panel -->
 <div id="panel">
-
-  <!-- Precision legend -->
+  <!-- Precision -->
   <div>
-    <div class="panel-section-label">Precision</div>
-    <div class="tier-row">
-      <div class="tier-label"><div class="tier-dot" style="background:var(--green);box-shadow:0 0 6px var(--green)"></div>Street address</div>
-      <div class="tier-count" id="cnt-address">—</div>
-    </div>
-    <div class="tier-row">
-      <div class="tier-label"><div class="tier-dot" style="background:var(--amber);box-shadow:0 0 6px var(--amber)"></div>City / town</div>
-      <div class="tier-count" id="cnt-city">—</div>
-    </div>
-    <div class="tier-row">
-      <div class="tier-label"><div class="tier-dot" style="background:var(--red);box-shadow:0 0 6px var(--red)"></div>Country centre</div>
-      <div class="tier-count" id="cnt-country">—</div>
-    </div>
+    <div class="panel-lbl">Precision</div>
+    <div class="tier-row"><div class="tier-label"><div class="tier-dot" style="background:var(--green);box-shadow:0 0 6px var(--green)"></div>Street address</div><div class="tier-count" id="cnt-address">—</div></div>
+    <div class="tier-row"><div class="tier-label"><div class="tier-dot" style="background:var(--amber);box-shadow:0 0 6px var(--amber)"></div>City / town</div><div class="tier-count" id="cnt-city">—</div></div>
+    <div class="tier-row"><div class="tier-label"><div class="tier-dot" style="background:var(--red);box-shadow:0 0 6px var(--red)"></div>Country centre</div><div class="tier-count" id="cnt-country">—</div></div>
   </div>
-
   <hr class="panel-divider"/>
-
-  <!-- Country filter -->
+  <!-- Country -->
   <div>
-    <div class="panel-section-label">Country</div>
+    <div class="panel-lbl">Country</div>
     <select id="country-select"><option value="">All countries</option></select>
   </div>
-
   <hr class="panel-divider"/>
-
-  <!-- Specs filters (collapsible) -->
+  <!-- Spec filters -->
   <div>
-    <button id="spec-toggle">
-      <span class="arrow">▶</span> Filter by specs
-    </button>
+    <button id="spec-toggle"><span class="arrow">▶</span> Filter by specs</button>
     <div id="spec-panel">
       <br/>
-      <div class="spec-note">
-        ⚠ Not all data centers report every stat. Filters only apply to
-        DCs where that measurement is available — the coverage percentage
-        shown beside each filter tells you how many DCs we have data for.
-      </div>
-
-      <!-- Total Space -->
+      <div class="spec-note">⚠ Not all data centers report every stat. Filters only apply to DCs where that measurement is available — the coverage percentage tells you how many DCs we have data for.</div>
       <div class="spec-filter">
-        <div class="spec-filter-label">Total Space <span>sqft</span><span class="coverage-badge" id="cov-space">—</span></div>
+        <div class="spec-filter-label">Total Space <span class="unit">sqft</span><span class="coverage-badge" id="cov-space">—</span></div>
         <div class="range-row">
           <input class="range-input" id="space-min" type="number" min="0" placeholder="Min"/>
           <span class="range-sep">–</span>
           <input class="range-input" id="space-max" type="number" min="0" placeholder="Max"/>
         </div>
-        <label class="require-data-row">
-          <input type="checkbox" id="space-require"/> Only show DCs with size data
-        </label>
+        <label class="require-row"><input type="checkbox" id="space-require"/> Only show DCs with size data</label>
       </div>
-
-      <!-- Colocation Space -->
       <div class="spec-filter">
-        <div class="spec-filter-label">Colocation Space <span>sqft</span><span class="coverage-badge" id="cov-colo">—</span></div>
+        <div class="spec-filter-label">Colocation Space <span class="unit">sqft</span><span class="coverage-badge" id="cov-colo">—</span></div>
         <div class="range-row">
           <input class="range-input" id="colo-min" type="number" min="0" placeholder="Min"/>
           <span class="range-sep">–</span>
           <input class="range-input" id="colo-max" type="number" min="0" placeholder="Max"/>
         </div>
-        <label class="require-data-row">
-          <input type="checkbox" id="colo-require"/> Only show DCs with colo data
-        </label>
+        <label class="require-row"><input type="checkbox" id="colo-require"/> Only show DCs with colo data</label>
       </div>
-
-      <!-- Total Power -->
       <div class="spec-filter">
-        <div class="spec-filter-label">Total Power <span>MW</span><span class="coverage-badge" id="cov-power">—</span></div>
+        <div class="spec-filter-label">Total Power <span class="unit">MW</span><span class="coverage-badge" id="cov-power">—</span></div>
         <div class="range-row">
           <input class="range-input" id="power-min" type="number" min="0" step="0.1" placeholder="Min"/>
           <span class="range-sep">–</span>
           <input class="range-input" id="power-max" type="number" min="0" step="0.1" placeholder="Max"/>
         </div>
-        <label class="require-data-row">
-          <input type="checkbox" id="power-require"/> Only show DCs with power data
-        </label>
+        <label class="require-row"><input type="checkbox" id="power-require"/> Only show DCs with power data</label>
       </div>
-
     </div>
   </div>
-
   <hr class="panel-divider"/>
-
   <button id="reset-btn">Reset all filters</button>
   <div id="result-info"></div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<div id="globe"></div>
+<div id="popup"></div>
+<div id="tooltip"></div>
+
+<script src="https://unpkg.com/globe.gl"></script>
 <script>
-window.addEventListener('load', function() {
-// ── Map ───────────────────────────────────────────────────────────────────────
-const map = L.map('map', { center: [20,10], zoom: 2, zoomControl: false, preferCanvas: true });
-L.control.zoom({ position: 'bottomright' }).addTo(map);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com">CARTO</a>',
-  subdomains: 'abcd', maxZoom: 19,
-}).addTo(map);
+window.addEventListener('load', function () {
 
-const TIER_COLOR = { address:'#00ff88', city:'#fbbf24', country:'#f87171', unknown:'#f87171' };
+  const TIER_COLOR = { address:'#00ff88', city:'#fbbf24', country:'#f87171', unknown:'#f87171' };
 
-const clusterGroup = L.markerClusterGroup({
-  maxClusterRadius: 50, spiderfyOnMaxZoom: true, showCoverageOnHover: false,
-  iconCreateFunction(cluster) {
-    const n = cluster.getChildCount();
-    const s = n > 1000 ? 52 : n > 100 ? 42 : 34;
-    return L.divIcon({
-      html: `<div class="cluster-inner" style="width:${s}px;height:${s}px;font-size:${s<40?11:13}px">${n.toLocaleString()}</div>`,
-      className: 'custom-cluster', iconSize: [s,s], iconAnchor: [s/2,s/2],
-    });
-  },
-});
-map.addLayer(clusterGroup);
-
-// ── Stat parsing ──────────────────────────────────────────────────────────────
-function parseSqft(val) {
-  if (!val) return null;
-  const m = String(val).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/);
-  return m ? parseFloat(m[1]) : null;
-}
-function parseMW(val) {
-  if (!val) return null;
-  const m = String(val).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/);
-  return m ? parseFloat(m[1]) : null;
-}
-
-// ── Popup builder ─────────────────────────────────────────────────────────────
-function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function buildPopup(p, lat, lng) {
-  const STAT_LABELS = {
-    'total space':       'Total Space',
-    'colocation space':  'Colo Space',
-    'total power':       'Total Power',
-    'to nearest airport':'Nearest Airport',
-  };
-  const chips = Object.entries(STAT_LABELS)
-    .filter(([k]) => p[k])
-    .map(([k,l]) => `<div class="popup-stat-chip">${esc(p[k])} <span style="opacity:.6">${l}</span></div>`)
-    .join('');
-
-  const tierLabel = { address:'Exact', city:'City', country:'Country', unknown:'Country' };
-  const badge = `<span class="tier-badge ${p.tier||'country'}">${tierLabel[p.tier]||'Country'}</span>`;
-
-  const addr = p.address
-    ? `<div class="popup-row"><div class="popup-row-label">ADDR</div><div class="popup-row-value">${esc(p.address)}</div></div>`
-    : '';
-
-  const desc = p.description
-    ? `<hr class="popup-divider"><div class="popup-desc">${esc(p.description)}</div>`
-    : '';
-
-  // Image section
-  let imageHtml = '';
-  const svUrl  = `https://www.google.com/maps?q=${lat},${lng}&layer=c&cbll=${lat},${lng}`;
-  if (p.image_url) {
-    imageHtml = `
-      <div class="popup-images">
-        <div class="popup-img-wrap">
-          <img src="${esc(p.image_url)}" alt="${esc(p.name)}"
-               onload="this.classList.add('loaded')"
-               onerror="this.parentElement.innerHTML='<a class=popup-img-placeholder href=\\'${esc(p.page_url)}\\' target=\\'_blank\\'>No image</a>'"/>
-          <div class="popup-img-label">Official</div>
-        </div>
-        <a class="popup-img-wrap popup-img-placeholder" href="${esc(svUrl)}" target="_blank" rel="noopener">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
-          Street View →
-          <div class="popup-img-label">Click to open</div>
-        </a>
-      </div>`;
-  }
-
-  const dcLink = p.page_url
-    ? `<a class="popup-link" href="${esc(p.page_url)}" target="_blank" rel="noopener">
-         datacenters.com
-         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-           <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-           <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-         </svg></a>`
-    : '';
-
-  const svBtn = `<a class="popup-sv-btn" href="${esc(svUrl)}" target="_blank" rel="noopener">
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/>
-    </svg>
-    Street View</a>`;
-
-  return `
-    ${imageHtml}
-    <div class="popup-header">
-      <div class="popup-name">${esc(p.name)}${badge}</div>
-      <div class="popup-country">${esc(p.country)}</div>
-    </div>
-    <div class="popup-body">
-      ${addr}
-      ${chips ? `<div class="popup-stats">${chips}</div>` : ''}
-      ${desc}
-      <div class="popup-actions">${dcLink}${svBtn}</div>
-    </div>`;
-}
-
-// ── Data load ─────────────────────────────────────────────────────────────────
-let allMarkers = [];
-let countries  = new Set();
-
-fetch('datacenters.geojson')
-  .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-  .then(geojson => {
-    const features = geojson.features || [];
-    const tiers = { address:0, city:0, country:0 };
-
-    features.forEach(f => {
-      const [lng, lat] = f.geometry.coordinates;
-      const p = f.properties;
-      countries.add(p.country);
-      const t = p.tier || 'country';
-      if (t in tiers) tiers[t]++;
-
-      const marker = L.circleMarker([lat,lng], {
-        radius: 5, fillColor: TIER_COLOR[t] || TIER_COLOR.country,
-        fillOpacity: 0.85, color: 'rgba(255,255,255,.3)', weight: 1,
-      }).bindPopup(() => buildPopup(p, lat, lng), { maxWidth: 360, minWidth: 300 });
-
-      // Pre-parse stats for filtering
-      marker._stats = {
-        space: parseSqft(p['total space']),
-        colo:  parseSqft(p['colocation space']),
-        power: parseMW(p['total power']),
-      };
-
-      allMarkers.push({ marker, props: p });
-      clusterGroup.addLayer(marker);
-    });
-
-    document.getElementById('header-count').innerHTML =
-      `<span>${features.length.toLocaleString()}</span> data centers · <span>${countries.size}</span> countries`;
-
-    document.getElementById('cnt-address').textContent = tiers.address.toLocaleString();
-
-    // Calculate stat coverage and update filter labels
-    const total = features.length;
-    const coverage = {
-      space: features.filter(f => f.properties['total space']).length,
-      colo:  features.filter(f => f.properties['colocation space']).length,
-      power: features.filter(f => f.properties['total power']).length,
-    };
-    Object.entries(coverage).forEach(([key, count]) => {
-      const pct = total > 0 ? Math.round(count / total * 100) : 0;
-      const el  = document.getElementById('cov-' + key);
-      if (!el) return;
-      el.textContent = pct + '% of DCs';
-      el.className   = 'coverage-badge ' + (pct >= 60 ? 'high' : pct >= 30 ? 'medium' : 'low');
-      // Also update the "only show" checkbox labels with the count
-      // tooltip on checkbox label — walk siblings instead of :has() which throws in some browsers
-      const reqId = { space:'space-require', colo:'colo-require', power:'power-require' }[key];
-      const cb  = document.getElementById(reqId);
-      if (cb && cb.parentElement) cb.parentElement.title = `${count.toLocaleString()} of ${total.toLocaleString()} DCs have this data`;
-    });
-    document.getElementById('cnt-city').textContent    = tiers.city.toLocaleString();
-    document.getElementById('cnt-country').textContent = tiers.country.toLocaleString();
-
-    const sel = document.getElementById('country-select');
-    [...countries].sort().forEach(c => {
-      const o = document.createElement('option'); o.value = o.textContent = c; sel.appendChild(o);
-    });
+  // ── Globe init ──────────────────────────────────────────────────────────────
+  const world = Globe({
+    rendererConfig: { antialias: true, alpha: false },
+    animateIn: true,
   })
-  .catch(err => {
-    document.getElementById('header-count').textContent = 'Could not load datacenters.geojson — see README';
-    console.error(err);
-  });
+    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
+    .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+    .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+    .showAtmosphere(true)
+    .atmosphereColor('#00d4ff')
+    .atmosphereAltitude(0.13)
+    .pointAltitude(0.008)
+    .pointRadius(0.22)
+    .pointColor(d => TIER_COLOR[d.tier] || TIER_COLOR.country)
+    .pointLabel('')          // we handle tooltips ourselves
+    .onPointClick(onPointClick)
+    .onPointHover(onPointHover)
+    (document.getElementById('globe'));
 
-// ── Spec-filter toggle ────────────────────────────────────────────────────────
-document.getElementById('spec-toggle').addEventListener('click', function() {
-  this.classList.toggle('open');
-  document.getElementById('spec-panel').classList.toggle('open');
-});
+  // Smooth controls
+  world.controls().enableDamping  = true;
+  world.controls().dampingFactor  = 0.08;
+  world.controls().autoRotate     = true;
+  world.controls().autoRotateSpeed = 0.35;
+  world.controls().minDistance    = 150;
+  world.controls().maxDistance    = 800;
 
-// ── Filter state ──────────────────────────────────────────────────────────────
-let activeCountry = '';
-let activeSearch  = '';
+  // Start looking at the Atlantic so most content is centred
+  world.pointOfView({ lat: 20, lng: 10, altitude: 2.2 }, 0);
 
-function getSpecFilters() {
-  const n = v => v === '' ? null : parseFloat(v);
-  return {
-    space: { min: n(document.getElementById('space-min').value), max: n(document.getElementById('space-max').value), require: document.getElementById('space-require').checked },
-    colo:  { min: n(document.getElementById('colo-min').value),  max: n(document.getElementById('colo-max').value),  require: document.getElementById('colo-require').checked },
-    power: { min: n(document.getElementById('power-min').value), max: n(document.getElementById('power-max').value), require: document.getElementById('power-require').checked },
-  };
-}
-
-function matchesSpec(markerStats, filter) {
-  const { min, max, require: req } = filter;
-  const hasMin = min !== null, hasMax = max !== null;
-  const val = markerStats;
-
-  if (req && val === null) return false;        // require data, has none
-  if (val === null) return true;                // no data, not required — pass
-  if (hasMin && val < min) return false;
-  if (hasMax && val > max) return false;
-  return true;
-}
-
-function applyFilters() {
-  const q    = activeSearch.toLowerCase().trim();
-  const spec = getSpecFilters();
-
-  clusterGroup.clearLayers();
-
-  const matches = allMarkers.filter(({ props: p, marker }) => {
-    const countryOk = !activeCountry || p.country === activeCountry;
-    const searchOk  = !q || (p.name||'').toLowerCase().includes(q)
-                         || (p.country||'').toLowerCase().includes(q)
-                         || (p.address||'').toLowerCase().includes(q);
-    const spaceOk   = matchesSpec(marker._stats.space, spec.space);
-    const coloOk    = matchesSpec(marker._stats.colo,  spec.colo);
-    const powerOk   = matchesSpec(marker._stats.power, spec.power);
-    return countryOk && searchOk && spaceOk && coloOk && powerOk;
-  });
-
-  matches.forEach(({ marker }) => clusterGroup.addLayer(marker));
-
-  const hasFilter = q || activeCountry ||
-    Object.values(spec).some(f => f.min !== null || f.max !== null || f.require);
-  const info = document.getElementById('result-info');
-  if (hasFilter) {
-    info.style.display = 'block';
-    info.textContent   = `${matches.length.toLocaleString()} results`;
-    if (matches.length > 0) {
-      const bounds = L.latLngBounds(matches.slice(0,500).map(m => m.marker.getLatLng()));
-      map.fitBounds(bounds, { padding:[40,40], maxZoom:8 });
-    }
-  } else {
-    info.style.display = 'none';
+  // ── Pause auto-rotate while user is interacting ────────────────────────────
+  let rotateTimer;
+  function pauseRotate() {
+    world.controls().autoRotate = false;
+    clearTimeout(rotateTimer);
+    rotateTimer = setTimeout(() => { world.controls().autoRotate = true; }, 4000);
   }
-}
+  document.getElementById('globe').addEventListener('pointerdown', pauseRotate);
 
-// ── Event listeners ───────────────────────────────────────────────────────────
-const searchEl = document.getElementById('search');
-const clearBtn = document.getElementById('clear-btn');
+  // ── Stat parsing ────────────────────────────────────────────────────────────
+  function parseSqft(v) { if (!v) return null; const m=String(v).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/); return m?parseFloat(m[1]):null; }
+  function parseMW(v)   { if (!v) return null; const m=String(v).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/); return m?parseFloat(m[1]):null; }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-searchEl.addEventListener('input', () => {
-  activeSearch = searchEl.value;
-  clearBtn.style.display = activeSearch ? 'block' : 'none';
-  applyFilters();
-});
-clearBtn.addEventListener('click', () => {
-  searchEl.value = ''; activeSearch = '';
-  clearBtn.style.display = 'none'; applyFilters();
-});
-document.getElementById('country-select').addEventListener('change', e => {
-  activeCountry = e.target.value; applyFilters();
-});
+  // ── Popup ───────────────────────────────────────────────────────────────────
+  const popupEl  = document.getElementById('popup');
+  const tooltipEl= document.getElementById('tooltip');
 
-// Spec filter inputs
-['space-min','space-max','colo-min','colo-max','power-min','power-max',
- 'space-require','colo-require','power-require'].forEach(id => {
-  document.getElementById(id).addEventListener(
-    id.includes('require') ? 'change' : 'input', applyFilters
-  );
-});
+  function buildPopup(d) {
+    const SLABELS = { 'total space':'Total Space', 'colocation space':'Colo Space', 'total power':'Total Power', 'to nearest airport':'Nearest Airport' };
+    const chips = Object.entries(SLABELS).filter(([k])=>d[k]).map(([k,l])=>`<div class="popup-chip">${esc(d[k])} <span style="opacity:.6">${l}</span></div>`).join('');
+    const tierLbl = { address:'Exact', city:'City', country:'Country', unknown:'Country' };
+    const badge = `<span class="tier-badge ${d.tier||'country'}">${tierLbl[d.tier]||'Country'}</span>`;
+    const addr  = d.address ? `<div class="popup-row"><div class="popup-row-lbl">ADDR</div><div class="popup-row-val">${esc(d.address)}</div></div>` : '';
+    const desc  = d.description ? `<hr class="popup-divider"><div class="popup-desc">${esc(d.description)}</div>` : '';
+    // Street View is only meaningful when we have an exact street address.
+    // City- and country-level coordinates point to a generic centre, not the building.
+    const hasExactLocation = d.tier === 'address';
+    const svUrl = hasExactLocation
+      ? `https://www.google.com/maps?q=${d.lat},${d.lng}&layer=c&cbll=${d.lat},${d.lng}`
+      : null;
 
-document.getElementById('reset-btn').addEventListener('click', () => {
-  searchEl.value = ''; activeSearch = ''; activeCountry = '';
-  clearBtn.style.display = 'none';
-  document.getElementById('country-select').value = '';
-  document.getElementById('result-info').style.display = 'none';
-  ['space-min','space-max','colo-min','colo-max','power-min','power-max'].forEach(id => {
-    document.getElementById(id).value = '';
+    let images = '';
+    if (d.image_url) {
+      if (hasExactLocation) {
+        // Two-column: official photo left, Street View click-through right
+        images = `<div class="popup-images">
+          <div class="popup-img-wrap">
+            <img src="${esc(d.image_url)}" alt="" onload="this.classList.add('loaded')" onerror="this.parentElement.innerHTML='<span class=popup-img-placeholder>No image</span>'"/>
+            <div class="popup-img-label">Official</div>
+          </div>
+          <a class="popup-img-wrap popup-img-placeholder" href="${esc(svUrl)}" target="_blank" rel="noopener">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+            Street View →
+            <div class="popup-img-label">Click to open</div>
+          </a>
+        </div>`;
+      } else {
+        // Single-column: official photo only, no Street View
+        images = `<div class="popup-images single">
+          <div class="popup-img-wrap">
+            <img src="${esc(d.image_url)}" alt="" onload="this.classList.add('loaded')" onerror="this.parentElement.innerHTML='<span class=popup-img-placeholder>No image</span>'"/>
+            <div class="popup-img-label">Official</div>
+          </div>
+        </div>`;
+      }
+    }
+
+    const dcLink = d.page_url ? `<a class="popup-link" href="${esc(d.page_url)}" target="_blank" rel="noopener">datacenters.com <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>` : '';
+    const svBtn = hasExactLocation
+      ? `<a class="popup-sv-btn" href="${esc(svUrl)}" target="_blank" rel="noopener"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>Street View</a>`
+      : '';
+
+    return `${images}
+      <button class="popup-close" onclick="document.getElementById('popup').style.display='none'">×</button>
+      <div class="popup-header"><div class="popup-name">${esc(d.name)}${badge}</div><div class="popup-country">${esc(d.country)}</div></div>
+      <div class="popup-body">${addr}${chips?`<div class="popup-stats">${chips}</div>`:''}${desc}<div class="popup-actions">${dcLink}${svBtn}</div></div>`;
+  }
+
+  function showPopup(d, clientX, clientY) {
+    popupEl.innerHTML = buildPopup(d);
+    popupEl.style.display = 'block';
+    // Position near click, clamp to viewport
+    requestAnimationFrame(() => {
+      const pw = popupEl.offsetWidth  || 340;
+      const ph = popupEl.offsetHeight || 420;
+      let x = clientX + 18, y = clientY - 24;
+      if (x + pw > window.innerWidth  - 8) x = clientX - pw - 18;
+      if (y + ph > window.innerHeight - 8) y = window.innerHeight - ph - 8;
+      if (y < 60) y = 60;
+      if (x < 8)  x = 8;
+      popupEl.style.left = x + 'px';
+      popupEl.style.top  = y + 'px';
+    });
+  }
+
+  function onPointClick(d, ev) {
+    if (!d) { popupEl.style.display = 'none'; return; }
+    pauseRotate();
+    showPopup(d, ev.clientX, ev.clientY);
+  }
+
+  function onPointHover(d) {
+    document.getElementById('globe').style.cursor = d ? 'pointer' : 'default';
+    if (d) {
+      tooltipEl.textContent  = d.name;
+      tooltipEl.style.display = 'block';
+    } else {
+      tooltipEl.style.display = 'none';
+    }
+  }
+
+  document.getElementById('globe').addEventListener('mousemove', ev => {
+    tooltipEl.style.left = (ev.clientX + 14) + 'px';
+    tooltipEl.style.top  = (ev.clientY - 32) + 'px';
   });
-  ['space-require','colo-require','power-require'].forEach(id => {
-    document.getElementById(id).checked = false;
+
+  // Close popup when clicking the globe background
+  document.getElementById('globe').addEventListener('click', ev => {
+    if (ev.target.tagName === 'CANVAS') popupEl.style.display = 'none';
   });
-  clusterGroup.clearLayers();
-  allMarkers.forEach(({ marker }) => clusterGroup.addLayer(marker));
-  map.setView([20,10], 2);
-});
+
+  // ── Data ────────────────────────────────────────────────────────────────────
+  let allPoints = [];
+  let countries = new Set();
+
+  fetch('datacenters.geojson')
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(geojson => {
+      const feats = geojson.features || [];
+      const tiers = { address:0, city:0, country:0 };
+
+      allPoints = feats.map(f => {
+        const p = f.properties;
+        const t = p.tier || 'country';
+        if (t in tiers) tiers[t]++;
+        countries.add(p.country);
+        return {
+          lat: f.geometry.coordinates[1],
+          lng: f.geometry.coordinates[0],
+          ...p,
+          _space: parseSqft(p['total space']),
+          _colo:  parseSqft(p['colocation space']),
+          _power: parseMW(p['total power']),
+        };
+      });
+
+      world.pointsData(allPoints);
+
+      // Header
+      document.getElementById('header-count').innerHTML =
+        `<span>${feats.length.toLocaleString()}</span> data centers · <span>${countries.size}</span> countries`;
+      document.getElementById('cnt-address').textContent = tiers.address.toLocaleString();
+      document.getElementById('cnt-city').textContent    = tiers.city.toLocaleString();
+      document.getElementById('cnt-country').textContent = tiers.country.toLocaleString();
+
+      // Coverage badges
+      const total = feats.length;
+      [['space','total space','cov-space'], ['colo','colocation space','cov-colo'], ['power','total power','cov-power']].forEach(([,key,id]) => {
+        const n   = allPoints.filter(d => d[key]).length;
+        const pct = Math.round(n / total * 100);
+        const el  = document.getElementById(id);
+        el.textContent = pct + '% of DCs';
+        el.className   = 'coverage-badge ' + (pct >= 60 ? 'high' : pct >= 30 ? 'medium' : 'low');
+        const cb = document.getElementById(id.replace('cov-','') + '-require');
+        if (cb) cb.title = n.toLocaleString() + ' of ' + total.toLocaleString() + ' DCs have this data';
+      });
+
+      // Country dropdown
+      const sel = document.getElementById('country-select');
+      [...countries].sort().forEach(c => {
+        const o = document.createElement('option'); o.value = o.textContent = c; sel.appendChild(o);
+      });
+    })
+    .catch(err => {
+      document.getElementById('header-count').textContent = 'Could not load datacenters.geojson — see README';
+      console.error(err);
+    });
+
+  // ── Filtering ───────────────────────────────────────────────────────────────
+  let activeCountry = '', activeSearch = '';
+
+  function getSpecFilters() {
+    const n = v => v === '' ? null : parseFloat(v);
+    return {
+      space: { min:n(document.getElementById('space-min').value), max:n(document.getElementById('space-max').value), req:document.getElementById('space-require').checked },
+      colo:  { min:n(document.getElementById('colo-min').value),  max:n(document.getElementById('colo-max').value),  req:document.getElementById('colo-require').checked },
+      power: { min:n(document.getElementById('power-min').value), max:n(document.getElementById('power-max').value), req:document.getElementById('power-require').checked },
+    };
+  }
+
+  function matchSpec(val, f) {
+    if (f.req && val === null) return false;
+    if (val === null) return true;
+    if (f.min !== null && val < f.min) return false;
+    if (f.max !== null && val > f.max) return false;
+    return true;
+  }
+
+  function applyFilters() {
+    const q    = activeSearch.toLowerCase().trim();
+    const spec = getSpecFilters();
+
+    const matches = allPoints.filter(d => {
+      if (activeCountry && d.country !== activeCountry) return false;
+      if (q && !((d.name||'').toLowerCase().includes(q) || (d.country||'').toLowerCase().includes(q) || (d.address||'').toLowerCase().includes(q))) return false;
+      if (!matchSpec(d._space, spec.space)) return false;
+      if (!matchSpec(d._colo,  spec.colo))  return false;
+      if (!matchSpec(d._power, spec.power)) return false;
+      return true;
+    });
+
+    world.pointsData(matches);
+
+    const hasFilter = q || activeCountry || Object.values(spec).some(f => f.min!==null||f.max!==null||f.req);
+    const info = document.getElementById('result-info');
+    if (hasFilter) {
+      info.style.display = 'block';
+      info.textContent   = matches.length.toLocaleString() + ' results';
+    } else {
+      info.style.display = 'none';
+    }
+
+    // When filtering by country, fly the globe to that region
+    if (activeCountry && matches.length) {
+      const avgLat = matches.reduce((s,d)=>s+d.lat,0) / matches.length;
+      const avgLng = matches.reduce((s,d)=>s+d.lng,0) / matches.length;
+      world.pointOfView({ lat:avgLat, lng:avgLng, altitude:1.8 }, 1200);
+    }
+  }
+
+  // ── Event wiring ────────────────────────────────────────────────────────────
+  const searchEl = document.getElementById('search');
+  const clearBtn = document.getElementById('clear-btn');
+
+  searchEl.addEventListener('input', () => {
+    activeSearch = searchEl.value;
+    clearBtn.style.display = activeSearch ? 'block' : 'none';
+    applyFilters();
+  });
+  clearBtn.addEventListener('click', () => {
+    searchEl.value = ''; activeSearch = ''; clearBtn.style.display = 'none'; applyFilters();
+  });
+  document.getElementById('country-select').addEventListener('change', e => {
+    activeCountry = e.target.value; applyFilters();
+  });
+  document.getElementById('spec-toggle').addEventListener('click', function() {
+    this.classList.toggle('open');
+    document.getElementById('spec-panel').classList.toggle('open');
+  });
+  ['space-min','space-max','colo-min','colo-max','power-min','power-max'].forEach(id =>
+    document.getElementById(id).addEventListener('input', applyFilters));
+  ['space-require','colo-require','power-require'].forEach(id =>
+    document.getElementById(id).addEventListener('change', applyFilters));
+
+  document.getElementById('reset-btn').addEventListener('click', () => {
+    searchEl.value=''; activeSearch=''; activeCountry='';
+    clearBtn.style.display='none';
+    document.getElementById('country-select').value='';
+    document.getElementById('result-info').style.display='none';
+    ['space-min','space-max','colo-min','colo-max','power-min','power-max'].forEach(id=>document.getElementById(id).value='');
+    ['space-require','colo-require','power-require'].forEach(id=>document.getElementById(id).checked=false);
+    world.pointsData(allPoints);
+    world.pointOfView({ lat:20, lng:10, altitude:2.2 }, 1000);
+    popupEl.style.display='none';
+  });
 
 }); // end load
 </script>
