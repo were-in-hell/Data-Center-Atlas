@@ -97,9 +97,21 @@ body { background: var(--bg); font-family: var(--sans); color: var(--text); heig
 .spec-filter { margin-bottom: 10px; }
 .spec-filter-label {
   font-size: 11px; color: var(--text); margin-bottom: 5px; display: flex;
-  align-items: center; justify-content: space-between;
+  align-items: center; gap: 6px;
 }
 .spec-filter-label span { font-family: var(--mono); font-size: 9px; color: var(--muted); }
+.coverage-badge {
+  font-family: var(--mono); font-size: 9px; border-radius: 3px; padding: 1px 5px;
+  margin-left: auto; flex-shrink: 0;
+}
+.coverage-badge.low    { background: rgba(248,113,113,.12); color: var(--red); }
+.coverage-badge.medium { background: rgba(251,191,36,.12);  color: var(--amber); }
+.coverage-badge.high   { background: rgba(0,255,136,.12);   color: var(--green); }
+.spec-note {
+  font-size: 10px; color: var(--muted); line-height: 1.5; margin-bottom: 10px;
+  padding: 7px 9px; background: rgba(251,191,36,.06);
+  border: 1px solid rgba(251,191,36,.15); border-radius: 6px;
+}
 .range-row { display: flex; align-items: center; gap: 5px; }
 .range-input {
   flex: 1; background: rgba(255,255,255,.04); border: 1px solid var(--border);
@@ -298,10 +310,15 @@ body { background: var(--bg); font-family: var(--sans); color: var(--text); heig
     </button>
     <div id="spec-panel">
       <br/>
+      <div class="spec-note">
+        ⚠ Not all data centers report every stat. Filters only apply to
+        DCs where that measurement is available — the coverage percentage
+        shown beside each filter tells you how many DCs we have data for.
+      </div>
 
       <!-- Total Space -->
       <div class="spec-filter">
-        <div class="spec-filter-label">Total Space <span>sqft</span></div>
+        <div class="spec-filter-label">Total Space <span>sqft</span><span class="coverage-badge" id="cov-space">—</span></div>
         <div class="range-row">
           <input class="range-input" id="space-min" type="number" min="0" placeholder="Min"/>
           <span class="range-sep">–</span>
@@ -314,7 +331,7 @@ body { background: var(--bg); font-family: var(--sans); color: var(--text); heig
 
       <!-- Colocation Space -->
       <div class="spec-filter">
-        <div class="spec-filter-label">Colocation Space <span>sqft</span></div>
+        <div class="spec-filter-label">Colocation Space <span>sqft</span><span class="coverage-badge" id="cov-colo">—</span></div>
         <div class="range-row">
           <input class="range-input" id="colo-min" type="number" min="0" placeholder="Min"/>
           <span class="range-sep">–</span>
@@ -327,7 +344,7 @@ body { background: var(--bg); font-family: var(--sans); color: var(--text); heig
 
       <!-- Total Power -->
       <div class="spec-filter">
-        <div class="spec-filter-label">Total Power <span>MW</span></div>
+        <div class="spec-filter-label">Total Power <span>MW</span><span class="coverage-badge" id="cov-power">—</span></div>
         <div class="range-row">
           <input class="range-input" id="power-min" type="number" min="0" step="0.1" placeholder="Min"/>
           <span class="range-sep">–</span>
@@ -350,6 +367,7 @@ body { background: var(--bg); font-family: var(--sans); color: var(--text); heig
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
+window.addEventListener('load', function() {
 // ── Map ───────────────────────────────────────────────────────────────────────
 const map = L.map('map', { center: [20,10], zoom: 2, zoomControl: false, preferCanvas: true });
 L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -499,6 +517,26 @@ fetch('datacenters.geojson')
       `<span>${features.length.toLocaleString()}</span> data centers · <span>${countries.size}</span> countries`;
 
     document.getElementById('cnt-address').textContent = tiers.address.toLocaleString();
+
+    // Calculate stat coverage and update filter labels
+    const total = features.length;
+    const coverage = {
+      space: features.filter(f => f.properties['total space']).length,
+      colo:  features.filter(f => f.properties['colocation space']).length,
+      power: features.filter(f => f.properties['total power']).length,
+    };
+    Object.entries(coverage).forEach(([key, count]) => {
+      const pct = total > 0 ? Math.round(count / total * 100) : 0;
+      const el  = document.getElementById('cov-' + key);
+      if (!el) return;
+      el.textContent = pct + '% of DCs';
+      el.className   = 'coverage-badge ' + (pct >= 60 ? 'high' : pct >= 30 ? 'medium' : 'low');
+      // Also update the "only show" checkbox labels with the count
+      // tooltip on checkbox label — walk siblings instead of :has() which throws in some browsers
+      const reqId = { space:'space-require', colo:'colo-require', power:'power-require' }[key];
+      const cb  = document.getElementById(reqId);
+      if (cb && cb.parentElement) cb.parentElement.title = `${count.toLocaleString()} of ${total.toLocaleString()} DCs have this data`;
+    });
     document.getElementById('cnt-city').textContent    = tiers.city.toLocaleString();
     document.getElementById('cnt-country').textContent = tiers.country.toLocaleString();
 
@@ -617,6 +655,8 @@ document.getElementById('reset-btn').addEventListener('click', () => {
   allMarkers.forEach(({ marker }) => clusterGroup.addLayer(marker));
   map.setView([20,10], 2);
 });
+
+}); // end load
 </script>
 </body>
 </html>
