@@ -27,345 +27,217 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); font-family: var(--sans); color: var(--text); height: 100vh; overflow: hidden; }
 
-body {
-  background: var(--bg);
-  font-family: var(--sans);
-  color: var(--text);
-  height: 100vh;
-  overflow: hidden;
-}
-
-/* ── Header ─────────────────────────────────────────────────────────── */
+/* ── Header ──────────────────────────────────────────────────────────── */
 #header {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  height: 52px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-  gap: 16px;
-  z-index: 1000;
-  backdrop-filter: blur(12px);
+  position: fixed; top: 0; left: 0; right: 0; height: 52px;
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 16px;
+  z-index: 1000; backdrop-filter: blur(12px);
 }
-
 #header-title {
-  font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  color: var(--cyan);
-  text-transform: uppercase;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  font-family: var(--mono); font-size: 13px; font-weight: 700;
+  letter-spacing: .18em; color: var(--cyan); text-transform: uppercase;
+  display: flex; align-items: center; gap: 10px;
 }
-
 .pulse-dot {
-  width: 7px; height: 7px;
-  background: var(--green);
-  border-radius: 50%;
-  box-shadow: 0 0 8px var(--green);
-  animation: pulse 2s ease-in-out infinite;
+  width: 7px; height: 7px; background: var(--green); border-radius: 50%;
+  box-shadow: 0 0 8px var(--green); animation: pulse 2s ease-in-out infinite;
 }
-@keyframes pulse {
-  0%,100% { opacity: 1; box-shadow: 0 0 8px var(--green); }
-  50%      { opacity: 0.4; box-shadow: 0 0 2px var(--green); }
-}
-
-#header-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  margin-left: auto;
-}
+@keyframes pulse { 0%,100%{opacity:1;box-shadow:0 0 8px var(--green)} 50%{opacity:.4;box-shadow:0 0 2px var(--green)} }
+#header-count { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; }
 #header-count span { color: var(--cyan); }
 
-/* ── Search bar ──────────────────────────────────────────────────────── */
+/* ── Search ──────────────────────────────────────────────────────────── */
 #search-wrap {
-  display: flex;
-  align-items: center;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0 10px;
-  height: 32px;
-  gap: 6px;
-  flex: 0 0 260px;
+  display: flex; align-items: center;
+  background: rgba(255,255,255,.04); border: 1px solid var(--border);
+  border-radius: 6px; padding: 0 10px; height: 32px; gap: 6px; flex: 0 0 260px;
 }
 #search-wrap svg { color: var(--muted); flex-shrink: 0; }
-#search {
-  background: none;
-  border: none;
-  outline: none;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text);
-  width: 100%;
-}
+#search { background: none; border: none; outline: none; font-family: var(--mono); font-size: 11px; color: var(--text); width: 100%; }
 #search::placeholder { color: var(--muted); }
-#clear-btn {
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1;
-  background: none;
-  border: none;
-  padding: 0;
-  display: none;
-}
+#clear-btn { cursor: pointer; color: var(--muted); font-size: 14px; background: none; border: none; padding: 0; display: none; }
 #clear-btn:hover { color: var(--text); }
 
 /* ── Map ─────────────────────────────────────────────────────────────── */
-#map {
-  position: fixed;
-  top: 52px; left: 0; right: 0; bottom: 0;
-}
+#map { position: fixed; top: 52px; left: 0; right: 0; bottom: 0; }
 
 /* ── Side panel ──────────────────────────────────────────────────────── */
 #panel {
-  position: fixed;
-  top: 62px;
-  left: 12px;
-  width: 240px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px;
-  z-index: 900;
-  backdrop-filter: blur(12px);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  position: fixed; top: 62px; left: 12px; width: 250px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px; z-index: 900; backdrop-filter: blur(12px);
+  display: flex; flex-direction: column; gap: 12px;
+  max-height: calc(100vh - 80px); overflow-y: auto;
 }
+#panel::-webkit-scrollbar { width: 4px; }
+#panel::-webkit-scrollbar-track { background: transparent; }
+#panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 .panel-section-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.2em;
-  color: var(--muted);
-  text-transform: uppercase;
-  margin-bottom: 8px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .2em;
+  color: var(--muted); text-transform: uppercase; margin-bottom: 7px;
 }
+.tier-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.tier-label { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text); }
+.tier-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.tier-count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 
-.tier-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 7px;
-}
-.tier-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  color: var(--text);
-}
-.tier-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.tier-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-}
-
-/* country filter */
+/* Country filter */
 #country-select {
-  width: 100%;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 11px;
-  padding: 6px 8px;
-  outline: none;
-  cursor: pointer;
+  width: 100%; background: rgba(255,255,255,.04); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 11px;
+  padding: 6px 8px; outline: none; cursor: pointer;
 }
 #country-select option { background: #0b0f1a; }
 
+/* Specs filters */
+.spec-filter { margin-bottom: 10px; }
+.spec-filter-label {
+  font-size: 11px; color: var(--text); margin-bottom: 5px; display: flex;
+  align-items: center; justify-content: space-between;
+}
+.spec-filter-label span { font-family: var(--mono); font-size: 9px; color: var(--muted); }
+.range-row { display: flex; align-items: center; gap: 5px; }
+.range-input {
+  flex: 1; background: rgba(255,255,255,.04); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text); font-family: var(--mono); font-size: 10px;
+  padding: 4px 6px; outline: none; width: 0; min-width: 0;
+}
+.range-input:focus { border-color: var(--cyan); }
+.range-input::placeholder { color: var(--muted); }
+.range-sep { font-family: var(--mono); font-size: 10px; color: var(--muted); flex-shrink: 0; }
+.require-data-row {
+  display: flex; align-items: center; gap: 5px; margin-top: 4px;
+  font-size: 10px; color: var(--muted); cursor: pointer;
+}
+.require-data-row input[type=checkbox] { accent-color: var(--cyan); cursor: pointer; }
+
+/* Divider */
+.panel-divider { border: none; border-top: 1px solid var(--border); }
+
+/* Buttons */
 #reset-btn {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  padding: 5px 10px;
-  cursor: pointer;
-  width: 100%;
-  text-transform: uppercase;
-  transition: all .2s;
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--muted); font-family: var(--mono); font-size: 10px;
+  letter-spacing: .1em; padding: 5px 10px; cursor: pointer; width: 100%;
+  text-transform: uppercase; transition: all .2s;
 }
 #reset-btn:hover { color: var(--cyan); border-color: var(--cyan); }
+#result-info { font-family: var(--mono); font-size: 10px; color: var(--amber); display: none; }
 
-#result-info {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--amber);
-  display: none;
+/* Spec toggle button */
+#spec-toggle {
+  background: none; border: none; color: var(--muted); font-family: var(--mono);
+  font-size: 9px; letter-spacing: .15em; text-transform: uppercase; cursor: pointer;
+  display: flex; align-items: center; gap: 5px; padding: 0;
 }
+#spec-toggle:hover { color: var(--cyan); }
+#spec-toggle .arrow { transition: transform .2s; }
+#spec-toggle.open .arrow { transform: rotate(90deg); }
+#spec-panel { display: none; }
+#spec-panel.open { display: block; }
 
 /* ── Cluster icons ───────────────────────────────────────────────────── */
-.custom-cluster {
-  background: transparent !important;
-  border: none !important;
-}
+.custom-cluster { background: transparent !important; border: none !important; }
 .cluster-inner {
-  background: rgba(0,212,255,0.12);
-  border: 1.5px solid rgba(0,212,255,0.5);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--mono);
-  font-weight: 700;
-  color: var(--cyan);
-  transition: all .2s;
+  background: rgba(0,212,255,.12); border: 1.5px solid rgba(0,212,255,.5); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-weight: 700; color: var(--cyan);
 }
 
 /* ── Popup ───────────────────────────────────────────────────────────── */
 .leaflet-popup-content-wrapper {
-  background: #0d1520;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
-  padding: 0;
-  min-width: 280px;
-  max-width: 340px;
+  background: #0d1520; border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.6); padding: 0; min-width: 300px; max-width: 360px;
 }
 .leaflet-popup-content { margin: 0; }
 .leaflet-popup-tip { background: #0d1520; }
-.leaflet-popup-close-button {
-  color: var(--muted) !important;
-  font-size: 16px !important;
-  top: 8px !important; right: 8px !important;
-}
+.leaflet-popup-close-button { color: var(--muted) !important; font-size: 16px !important; top: 8px !important; right: 8px !important; }
 .leaflet-popup-close-button:hover { color: var(--text) !important; }
 
-.popup-header {
-  padding: 14px 16px 10px;
-  border-bottom: 1px solid var(--border);
+/* Popup image strip */
+.popup-images {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  border-radius: 10px 10px 0 0; overflow: hidden; height: 130px;
 }
-.popup-name {
-  font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 500;
-  color: #fff;
-  line-height: 1.4;
-  margin-bottom: 4px;
+.popup-images.single { grid-template-columns: 1fr; }
+.popup-img-wrap {
+  position: relative; overflow: hidden; background: #060b18; cursor: pointer;
 }
-.popup-country {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-  letter-spacing: 0.08em;
+.popup-img-wrap img {
+  width: 100%; height: 100%; object-fit: cover;
+  transition: opacity .2s; opacity: 0;
 }
+.popup-img-wrap img.loaded { opacity: 1; }
+.popup-img-label {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,.7));
+  font-family: var(--mono); font-size: 8px; letter-spacing: .1em;
+  color: rgba(255,255,255,.7); padding: 12px 6px 5px; text-transform: uppercase;
+}
+.popup-img-placeholder {
+  width: 100%; height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+  font-family: var(--mono); font-size: 9px; color: var(--muted);
+  letter-spacing: .1em; text-decoration: none;
+}
+.popup-img-placeholder svg { opacity: .3; }
+.popup-img-placeholder:hover { color: var(--cyan); }
+.popup-img-placeholder:hover svg { opacity: .6; }
 
-.popup-body { padding: 10px 16px 14px; }
-
-.popup-row {
-  display: flex;
-  gap: 8px;
-  font-size: 11px;
-  margin-bottom: 6px;
-  line-height: 1.5;
-}
-.popup-row-label {
-  font-family: var(--mono);
-  color: var(--muted);
-  flex-shrink: 0;
-  padding-top: 1px;
-}
+.popup-header { padding: 12px 14px 8px; border-bottom: 1px solid var(--border); }
+.popup-name { font-family: var(--sans); font-size: 13px; font-weight: 500; color: #fff; line-height: 1.4; margin-bottom: 3px; }
+.popup-country { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: .08em; }
+.popup-body { padding: 9px 14px 12px; }
+.popup-row { display: flex; gap: 8px; font-size: 11px; margin-bottom: 5px; line-height: 1.5; }
+.popup-row-label { font-family: var(--mono); color: var(--muted); flex-shrink: 0; padding-top: 1px; }
 .popup-row-value { color: var(--text); word-break: break-word; }
-
-.popup-divider {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 8px 0;
-}
-
-.popup-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
+.popup-divider { border: none; border-top: 1px solid var(--border); margin: 7px 0; }
+.popup-stats { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 7px; }
 .popup-stat-chip {
-  font-family: var(--mono);
-  font-size: 10px;
-  background: rgba(0,212,255,0.08);
-  border: 1px solid rgba(0,212,255,0.2);
-  border-radius: 4px;
-  padding: 3px 7px;
-  color: var(--cyan);
+  font-family: var(--mono); font-size: 10px;
+  background: rgba(0,212,255,.08); border: 1px solid rgba(0,212,255,.2);
+  border-radius: 4px; padding: 2px 6px; color: var(--cyan);
 }
-
 .popup-desc {
-  font-size: 11px;
-  color: var(--muted);
-  line-height: 1.6;
-  margin-bottom: 10px;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-size: 11px; color: var(--muted); line-height: 1.6; margin-bottom: 9px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
-
+.popup-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.popup-link, .popup-sv-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--mono); font-size: 10px; text-decoration: none;
+  letter-spacing: .06em; text-transform: uppercase;
+  border-radius: 5px; padding: 4px 9px; transition: all .2s;
+}
 .popup-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--cyan);
-  text-decoration: none;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.8;
-  transition: opacity .2s;
+  color: var(--cyan); border: 1px solid rgba(0,212,255,.25);
+  background: rgba(0,212,255,.06);
 }
-.popup-link:hover { opacity: 1; }
+.popup-link:hover { background: rgba(0,212,255,.14); border-color: var(--cyan); }
+.popup-sv-btn {
+  color: #34d399; border: 1px solid rgba(52,211,153,.25);
+  background: rgba(52,211,153,.06);
+}
+.popup-sv-btn:hover { background: rgba(52,211,153,.14); border-color: #34d399; }
 
 .tier-badge {
-  display: inline-block;
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  border-radius: 3px;
-  padding: 1px 5px;
-  text-transform: uppercase;
-  margin-left: 6px;
-  vertical-align: middle;
+  display: inline-block; font-family: var(--mono); font-size: 9px;
+  letter-spacing: .1em; border-radius: 3px; padding: 1px 5px;
+  text-transform: uppercase; margin-left: 6px; vertical-align: middle;
 }
-.tier-badge.address { background: rgba(0,255,136,0.12); color: var(--green); }
-.tier-badge.city    { background: rgba(251,191,36,0.12); color: var(--amber); }
-.tier-badge.country { background: rgba(248,113,113,0.12); color: var(--red); }
+.tier-badge.address { background: rgba(0,255,136,.12); color: var(--green); }
+.tier-badge.city    { background: rgba(251,191,36,.12); color: var(--amber); }
+.tier-badge.country { background: rgba(248,113,113,.12); color: var(--red); }
 
-/* ── Override Leaflet defaults ───────────────────────────────────────── */
-.leaflet-control-zoom {
-  border: 1px solid var(--border) !important;
-  border-radius: 8px !important;
-  overflow: hidden;
-}
-.leaflet-control-zoom a {
-  background: var(--panel) !important;
-  color: var(--text) !important;
-  border-bottom: 1px solid var(--border) !important;
-}
-.leaflet-control-zoom a:hover { background: rgba(0,212,255,0.1) !important; }
-.leaflet-control-attribution {
-  background: rgba(11,15,26,0.7) !important;
-  color: var(--muted) !important;
-  font-size: 9px !important;
-  backdrop-filter: blur(6px);
-}
+/* ── Leaflet overrides ───────────────────────────────────────────────── */
+.leaflet-control-zoom { border: 1px solid var(--border) !important; border-radius: 8px !important; overflow: hidden; }
+.leaflet-control-zoom a { background: var(--panel) !important; color: var(--text) !important; border-bottom: 1px solid var(--border) !important; }
+.leaflet-control-zoom a:hover { background: rgba(0,212,255,.1) !important; }
+.leaflet-control-attribution { background: rgba(11,15,26,.7) !important; color: var(--muted) !important; font-size: 9px !important; backdrop-filter: blur(6px); }
 .leaflet-control-attribution a { color: var(--muted) !important; }
 </style>
 </head>
@@ -377,8 +249,6 @@ body {
     <div class="pulse-dot"></div>
     Global Data Center Atlas
   </div>
-
-  <!-- Search -->
   <div id="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
@@ -386,46 +256,92 @@ body {
     <input id="search" type="text" placeholder="Search name, country, address…" autocomplete="off"/>
     <button id="clear-btn" title="Clear">✕</button>
   </div>
-
   <div id="header-count">Loading…</div>
 </header>
 
-<!-- Map -->
 <div id="map"></div>
 
 <!-- Side panel -->
 <div id="panel">
+
+  <!-- Precision legend -->
   <div>
     <div class="panel-section-label">Precision</div>
     <div class="tier-row">
-      <div class="tier-label">
-        <div class="tier-dot" style="background:var(--green);box-shadow:0 0 6px var(--green)"></div>
-        Street address
-      </div>
+      <div class="tier-label"><div class="tier-dot" style="background:var(--green);box-shadow:0 0 6px var(--green)"></div>Street address</div>
       <div class="tier-count" id="cnt-address">—</div>
     </div>
     <div class="tier-row">
-      <div class="tier-label">
-        <div class="tier-dot" style="background:var(--amber);box-shadow:0 0 6px var(--amber)"></div>
-        City / town
-      </div>
+      <div class="tier-label"><div class="tier-dot" style="background:var(--amber);box-shadow:0 0 6px var(--amber)"></div>City / town</div>
       <div class="tier-count" id="cnt-city">—</div>
     </div>
     <div class="tier-row">
-      <div class="tier-label">
-        <div class="tier-dot" style="background:var(--red);box-shadow:0 0 6px var(--red)"></div>
-        Country centre
-      </div>
+      <div class="tier-label"><div class="tier-dot" style="background:var(--red);box-shadow:0 0 6px var(--red)"></div>Country centre</div>
       <div class="tier-count" id="cnt-country">—</div>
     </div>
   </div>
 
+  <hr class="panel-divider"/>
+
+  <!-- Country filter -->
   <div>
-    <div class="panel-section-label">Filter by country</div>
-    <select id="country-select">
-      <option value="">All countries</option>
-    </select>
+    <div class="panel-section-label">Country</div>
+    <select id="country-select"><option value="">All countries</option></select>
   </div>
+
+  <hr class="panel-divider"/>
+
+  <!-- Specs filters (collapsible) -->
+  <div>
+    <button id="spec-toggle">
+      <span class="arrow">▶</span> Filter by specs
+    </button>
+    <div id="spec-panel">
+      <br/>
+
+      <!-- Total Space -->
+      <div class="spec-filter">
+        <div class="spec-filter-label">Total Space <span>sqft</span></div>
+        <div class="range-row">
+          <input class="range-input" id="space-min" type="number" min="0" placeholder="Min"/>
+          <span class="range-sep">–</span>
+          <input class="range-input" id="space-max" type="number" min="0" placeholder="Max"/>
+        </div>
+        <label class="require-data-row">
+          <input type="checkbox" id="space-require"/> Only show DCs with size data
+        </label>
+      </div>
+
+      <!-- Colocation Space -->
+      <div class="spec-filter">
+        <div class="spec-filter-label">Colocation Space <span>sqft</span></div>
+        <div class="range-row">
+          <input class="range-input" id="colo-min" type="number" min="0" placeholder="Min"/>
+          <span class="range-sep">–</span>
+          <input class="range-input" id="colo-max" type="number" min="0" placeholder="Max"/>
+        </div>
+        <label class="require-data-row">
+          <input type="checkbox" id="colo-require"/> Only show DCs with colo data
+        </label>
+      </div>
+
+      <!-- Total Power -->
+      <div class="spec-filter">
+        <div class="spec-filter-label">Total Power <span>MW</span></div>
+        <div class="range-row">
+          <input class="range-input" id="power-min" type="number" min="0" step="0.1" placeholder="Min"/>
+          <span class="range-sep">–</span>
+          <input class="range-input" id="power-max" type="number" min="0" step="0.1" placeholder="Max"/>
+        </div>
+        <label class="require-data-row">
+          <input type="checkbox" id="power-require"/> Only show DCs with power data
+        </label>
+      </div>
+
+    </div>
+  </div>
+
+  <hr class="panel-divider"/>
 
   <button id="reset-btn">Reset all filters</button>
   <div id="result-info"></div>
@@ -434,58 +350,60 @@ body {
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
-// ── Map init ──────────────────────────────────────────────────────────────────
-const map = L.map('map', {
-  center: [20, 10],
-  zoom: 2,
-  zoomControl: false,
-  preferCanvas: true,
-});
-
+// ── Map ───────────────────────────────────────────────────────────────────────
+const map = L.map('map', { center: [20,10], zoom: 2, zoomControl: false, preferCanvas: true });
 L.control.zoom({ position: 'bottomright' }).addTo(map);
-
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
   attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com">CARTO</a>',
-  subdomains: 'abcd',
-  maxZoom: 19,
+  subdomains: 'abcd', maxZoom: 19,
 }).addTo(map);
 
-// ── Colours ───────────────────────────────────────────────────────────────────
-const TIER_COLOR = {
-  address: '#00ff88',
-  city:    '#fbbf24',
-  country: '#f87171',
-  unknown: '#f87171',
-};
+const TIER_COLOR = { address:'#00ff88', city:'#fbbf24', country:'#f87171', unknown:'#f87171' };
 
-// ── Cluster group ─────────────────────────────────────────────────────────────
 const clusterGroup = L.markerClusterGroup({
-  maxClusterRadius: 50,
-  spiderfyOnMaxZoom: true,
-  showCoverageOnHover: false,
+  maxClusterRadius: 50, spiderfyOnMaxZoom: true, showCoverageOnHover: false,
   iconCreateFunction(cluster) {
     const n = cluster.getChildCount();
-    const size = n > 1000 ? 52 : n > 100 ? 42 : 34;
+    const s = n > 1000 ? 52 : n > 100 ? 42 : 34;
     return L.divIcon({
-      html: `<div class="cluster-inner" style="width:${size}px;height:${size}px;font-size:${size < 40 ? 11 : 13}px">${n.toLocaleString()}</div>`,
-      className: 'custom-cluster',
-      iconSize: [size, size],
-      iconAnchor: [size/2, size/2],
+      html: `<div class="cluster-inner" style="width:${s}px;height:${s}px;font-size:${s<40?11:13}px">${n.toLocaleString()}</div>`,
+      className: 'custom-cluster', iconSize: [s,s], iconAnchor: [s/2,s/2],
     });
   },
 });
 map.addLayer(clusterGroup);
 
+// ── Stat parsing ──────────────────────────────────────────────────────────────
+function parseSqft(val) {
+  if (!val) return null;
+  const m = String(val).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/);
+  return m ? parseFloat(m[1]) : null;
+}
+function parseMW(val) {
+  if (!val) return null;
+  const m = String(val).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/);
+  return m ? parseFloat(m[1]) : null;
+}
+
 // ── Popup builder ─────────────────────────────────────────────────────────────
-function buildPopup(p) {
-  const statKeys = ['total space','colocation space','total power','to nearest airport'];
-  const stats = statKeys
-    .filter(k => p[k])
-    .map(k => `<div class="popup-stat-chip">${p[k]} ${k}</div>`)
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function buildPopup(p, lat, lng) {
+  const STAT_LABELS = {
+    'total space':       'Total Space',
+    'colocation space':  'Colo Space',
+    'total power':       'Total Power',
+    'to nearest airport':'Nearest Airport',
+  };
+  const chips = Object.entries(STAT_LABELS)
+    .filter(([k]) => p[k])
+    .map(([k,l]) => `<div class="popup-stat-chip">${esc(p[k])} <span style="opacity:.6">${l}</span></div>`)
     .join('');
 
-  const tierLabel = { address: 'Exact', city: 'City', country: 'Country', unknown: 'Country' };
-  const badge = `<span class="tier-badge ${p.tier || 'country'}">${tierLabel[p.tier] || 'Country'}</span>`;
+  const tierLabel = { address:'Exact', city:'City', country:'Country', unknown:'Country' };
+  const badge = `<span class="tier-badge ${p.tier||'country'}">${tierLabel[p.tier]||'Country'}</span>`;
 
   const addr = p.address
     ? `<div class="popup-row"><div class="popup-row-label">ADDR</div><div class="popup-row-value">${esc(p.address)}</div></div>`
@@ -495,131 +413,171 @@ function buildPopup(p) {
     ? `<hr class="popup-divider"><div class="popup-desc">${esc(p.description)}</div>`
     : '';
 
-  const link = p.page_url
+  // Image section
+  let imageHtml = '';
+  const svUrl  = `https://www.google.com/maps?q=${lat},${lng}&layer=c&cbll=${lat},${lng}`;
+  if (p.image_url) {
+    imageHtml = `
+      <div class="popup-images">
+        <div class="popup-img-wrap">
+          <img src="${esc(p.image_url)}" alt="${esc(p.name)}"
+               onload="this.classList.add('loaded')"
+               onerror="this.parentElement.innerHTML='<a class=popup-img-placeholder href=\\'${esc(p.page_url)}\\' target=\\'_blank\\'>No image</a>'"/>
+          <div class="popup-img-label">Official</div>
+        </div>
+        <a class="popup-img-wrap popup-img-placeholder" href="${esc(svUrl)}" target="_blank" rel="noopener">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+          Street View →
+          <div class="popup-img-label">Click to open</div>
+        </a>
+      </div>`;
+  }
+
+  const dcLink = p.page_url
     ? `<a class="popup-link" href="${esc(p.page_url)}" target="_blank" rel="noopener">
-         View on datacenters.com
-         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+         datacenters.com
+         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
            <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-         </svg>
-       </a>`
+         </svg></a>`
     : '';
 
+  const svBtn = `<a class="popup-sv-btn" href="${esc(svUrl)}" target="_blank" rel="noopener">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/>
+    </svg>
+    Street View</a>`;
+
   return `
+    ${imageHtml}
     <div class="popup-header">
       <div class="popup-name">${esc(p.name)}${badge}</div>
       <div class="popup-country">${esc(p.country)}</div>
     </div>
     <div class="popup-body">
       ${addr}
-      ${stats ? `<div class="popup-stats">${stats}</div>` : ''}
+      ${chips ? `<div class="popup-stats">${chips}</div>` : ''}
       ${desc}
-      ${link}
+      <div class="popup-actions">${dcLink}${svBtn}</div>
     </div>`;
 }
 
-function esc(s) {
-  return String(s || '')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;');
-}
-
-// ── Data loading ──────────────────────────────────────────────────────────────
-let allMarkers = [];   // [{marker, props}, …]
-let countries   = new Set();
+// ── Data load ─────────────────────────────────────────────────────────────────
+let allMarkers = [];
+let countries  = new Set();
 
 fetch('datacenters.geojson')
-  .then(r => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
-  })
+  .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
   .then(geojson => {
     const features = geojson.features || [];
-
-    // Tier counts
-    const tiers = { address: 0, city: 0, country: 0 };
+    const tiers = { address:0, city:0, country:0 };
 
     features.forEach(f => {
       const [lng, lat] = f.geometry.coordinates;
       const p = f.properties;
-
       countries.add(p.country);
       const t = p.tier || 'country';
       if (t in tiers) tiers[t]++;
 
-      const marker = L.circleMarker([lat, lng], {
-        radius: 5,
-        fillColor: TIER_COLOR[t] || TIER_COLOR.country,
-        fillOpacity: 0.85,
-        color: 'rgba(255,255,255,0.3)',
-        weight: 1,
-      }).bindPopup(buildPopup(p), { maxWidth: 340, minWidth: 280 });
+      const marker = L.circleMarker([lat,lng], {
+        radius: 5, fillColor: TIER_COLOR[t] || TIER_COLOR.country,
+        fillOpacity: 0.85, color: 'rgba(255,255,255,.3)', weight: 1,
+      }).bindPopup(() => buildPopup(p, lat, lng), { maxWidth: 360, minWidth: 300 });
+
+      // Pre-parse stats for filtering
+      marker._stats = {
+        space: parseSqft(p['total space']),
+        colo:  parseSqft(p['colocation space']),
+        power: parseMW(p['total power']),
+      };
 
       allMarkers.push({ marker, props: p });
       clusterGroup.addLayer(marker);
     });
 
-    // Header count
     document.getElementById('header-count').innerHTML =
       `<span>${features.length.toLocaleString()}</span> data centers · <span>${countries.size}</span> countries`;
 
-    // Tier counts
-    const fmt = n => n.toLocaleString();
-    document.getElementById('cnt-address').textContent = fmt(tiers.address);
-    document.getElementById('cnt-city').textContent    = fmt(tiers.city);
-    document.getElementById('cnt-country').textContent = fmt(tiers.country);
+    document.getElementById('cnt-address').textContent = tiers.address.toLocaleString();
+    document.getElementById('cnt-city').textContent    = tiers.city.toLocaleString();
+    document.getElementById('cnt-country').textContent = tiers.country.toLocaleString();
 
-    // Populate country dropdown (sorted)
     const sel = document.getElementById('country-select');
     [...countries].sort().forEach(c => {
-      const opt = document.createElement('option');
-      opt.value = c; opt.textContent = c;
-      sel.appendChild(opt);
+      const o = document.createElement('option'); o.value = o.textContent = c; sel.appendChild(o);
     });
   })
   .catch(err => {
-    console.error('Failed to load datacenters.geojson:', err);
-    document.getElementById('header-count').textContent =
-      'Could not load datacenters.geojson — see README';
+    document.getElementById('header-count').textContent = 'Could not load datacenters.geojson — see README';
+    console.error(err);
   });
 
-// ── Search & filter ───────────────────────────────────────────────────────────
+// ── Spec-filter toggle ────────────────────────────────────────────────────────
+document.getElementById('spec-toggle').addEventListener('click', function() {
+  this.classList.toggle('open');
+  document.getElementById('spec-panel').classList.toggle('open');
+});
+
+// ── Filter state ──────────────────────────────────────────────────────────────
 let activeCountry = '';
 let activeSearch  = '';
 
+function getSpecFilters() {
+  const n = v => v === '' ? null : parseFloat(v);
+  return {
+    space: { min: n(document.getElementById('space-min').value), max: n(document.getElementById('space-max').value), require: document.getElementById('space-require').checked },
+    colo:  { min: n(document.getElementById('colo-min').value),  max: n(document.getElementById('colo-max').value),  require: document.getElementById('colo-require').checked },
+    power: { min: n(document.getElementById('power-min').value), max: n(document.getElementById('power-max').value), require: document.getElementById('power-require').checked },
+  };
+}
+
+function matchesSpec(markerStats, filter) {
+  const { min, max, require: req } = filter;
+  const hasMin = min !== null, hasMax = max !== null;
+  const val = markerStats;
+
+  if (req && val === null) return false;        // require data, has none
+  if (val === null) return true;                // no data, not required — pass
+  if (hasMin && val < min) return false;
+  if (hasMax && val > max) return false;
+  return true;
+}
+
 function applyFilters() {
-  const q       = activeSearch.toLowerCase().trim();
-  const country = activeCountry;
+  const q    = activeSearch.toLowerCase().trim();
+  const spec = getSpecFilters();
 
   clusterGroup.clearLayers();
 
-  const matches = allMarkers.filter(({ props: p }) => {
-    const countryOk = !country || p.country === country;
-    const searchOk  = !q
-      || (p.name    || '').toLowerCase().includes(q)
-      || (p.country || '').toLowerCase().includes(q)
-      || (p.address || '').toLowerCase().includes(q);
-    return countryOk && searchOk;
+  const matches = allMarkers.filter(({ props: p, marker }) => {
+    const countryOk = !activeCountry || p.country === activeCountry;
+    const searchOk  = !q || (p.name||'').toLowerCase().includes(q)
+                         || (p.country||'').toLowerCase().includes(q)
+                         || (p.address||'').toLowerCase().includes(q);
+    const spaceOk   = matchesSpec(marker._stats.space, spec.space);
+    const coloOk    = matchesSpec(marker._stats.colo,  spec.colo);
+    const powerOk   = matchesSpec(marker._stats.power, spec.power);
+    return countryOk && searchOk && spaceOk && coloOk && powerOk;
   });
 
   matches.forEach(({ marker }) => clusterGroup.addLayer(marker));
 
+  const hasFilter = q || activeCountry ||
+    Object.values(spec).some(f => f.min !== null || f.max !== null || f.require);
   const info = document.getElementById('result-info');
-  if (q || country) {
+  if (hasFilter) {
     info.style.display = 'block';
     info.textContent   = `${matches.length.toLocaleString()} results`;
-    if (matches.length && (q || country)) {
-      const bounds = L.latLngBounds(
-        matches.slice(0, 500).map(({ marker }) => marker.getLatLng())
-      );
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
+    if (matches.length > 0) {
+      const bounds = L.latLngBounds(matches.slice(0,500).map(m => m.marker.getLatLng()));
+      map.fitBounds(bounds, { padding:[40,40], maxZoom:8 });
     }
   } else {
     info.style.display = 'none';
   }
 }
 
-// Search input
+// ── Event listeners ───────────────────────────────────────────────────────────
 const searchEl = document.getElementById('search');
 const clearBtn = document.getElementById('clear-btn');
 
@@ -628,31 +586,36 @@ searchEl.addEventListener('input', () => {
   clearBtn.style.display = activeSearch ? 'block' : 'none';
   applyFilters();
 });
-
 clearBtn.addEventListener('click', () => {
-  searchEl.value = '';
-  activeSearch   = '';
-  clearBtn.style.display = 'none';
-  applyFilters();
+  searchEl.value = ''; activeSearch = '';
+  clearBtn.style.display = 'none'; applyFilters();
 });
-
-// Country filter
 document.getElementById('country-select').addEventListener('change', e => {
-  activeCountry = e.target.value;
-  applyFilters();
+  activeCountry = e.target.value; applyFilters();
 });
 
-// Reset
+// Spec filter inputs
+['space-min','space-max','colo-min','colo-max','power-min','power-max',
+ 'space-require','colo-require','power-require'].forEach(id => {
+  document.getElementById(id).addEventListener(
+    id.includes('require') ? 'change' : 'input', applyFilters
+  );
+});
+
 document.getElementById('reset-btn').addEventListener('click', () => {
-  searchEl.value = '';
-  activeSearch   = '';
-  activeCountry  = '';
+  searchEl.value = ''; activeSearch = ''; activeCountry = '';
   clearBtn.style.display = 'none';
   document.getElementById('country-select').value = '';
   document.getElementById('result-info').style.display = 'none';
+  ['space-min','space-max','colo-min','colo-max','power-min','power-max'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  ['space-require','colo-require','power-require'].forEach(id => {
+    document.getElementById(id).checked = false;
+  });
   clusterGroup.clearLayers();
   allMarkers.forEach(({ marker }) => clusterGroup.addLayer(marker));
-  map.setView([20, 10], 2);
+  map.setView([20,10], 2);
 });
 </script>
 </body>
