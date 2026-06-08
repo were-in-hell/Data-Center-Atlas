@@ -155,16 +155,38 @@ select option{background:#0b0f1a}
 <script src="https://unpkg.com/globe.gl"></script>
 <script>
 window.addEventListener('load', function () {
-  const CZ = 0.6; // altitude below which precision colour coding shows
+
+  const CLUSTER_ALT = 0.8; // above this → cluster view; below → individual dots
+  const CZ          = 0.8; // same threshold: precision legend shows when < CZ
+
+  // ── Performance: no textures — build both surfaces from tiny canvases ──────
+  function solidCanvas(color) {
+    const c = Object.assign(document.createElement('canvas'), {width:2,height:2});
+    c.getContext('2d').fillStyle = color;
+    c.getContext('2d').fillRect(0,0,2,2);
+    return c.toDataURL();
+  }
+  function starfield() {
+    const c = Object.assign(document.createElement('canvas'), {width:1024,height:512});
+    const ctx = c.getContext('2d');
+    ctx.fillStyle='#05080f'; ctx.fillRect(0,0,1024,512);
+    for (let i=0;i<700;i++) {
+      ctx.globalAlpha = Math.random()*.75+.25;
+      ctx.fillStyle   = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(Math.random()*1024, Math.random()*512, Math.random()*.9+.1, 0, Math.PI*2);
+      ctx.fill();
+    }
+    return c.toDataURL();
+  }
 
   // ── Globe ─────────────────────────────────────────────────────────────────
-  const world = Globe({ rendererConfig:{ antialias:true,alpha:false }, animateIn:true })
-    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
-    .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
-    .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+  const world = Globe({ rendererConfig:{antialias:true,alpha:false}, animateIn:false })
+    .globeImageUrl(solidCanvas('#0d1e35'))   // solid dark navy — no satellite
+    .backgroundImageUrl(starfield())         // canvas stars — no real photo
     .showAtmosphere(true)
-    .atmosphereColor('#00d4ff')
-    .atmosphereAltitude(0.13)
+    .atmosphereColor('#1e7abf')
+    .atmosphereAltitude(0.18)
     .pointAltitude(0.008)
     .pointRadius(0.22)
     .pointColor(d => ({address:'#00ff88',city:'#fbbf24',country:'#f87171'}[d.tier]||'#f87171'))
@@ -173,25 +195,28 @@ window.addEventListener('load', function () {
     .onPointHover(onPointHover)
     (document.getElementById('globe'));
 
-  world.controls().enableDamping  = true;
-  world.controls().dampingFactor  = 0.08;
-  world.controls().autoRotate     = true;
+  world.controls().enableDamping   = true;
+  world.controls().dampingFactor   = 0.08;
+  world.controls().autoRotate      = true;
   world.controls().autoRotateSpeed = 0.35;
-  world.controls().minDistance    = 120;
-  world.controls().maxDistance    = 800;
-  world.pointOfView({ lat:20,lng:10,altitude:2.2 },0);
+  world.controls().minDistance     = 120;
+  world.controls().maxDistance     = 800;
+  world.pointOfView({lat:20,lng:10,altitude:2.2}, 0);
 
+  // ── Rotate pause/resume ───────────────────────────────────────────────────
   let rotTimer;
-  function pauseRotate(){ world.controls().autoRotate=false; clearTimeout(rotTimer); }
-  function resumeRotate(){ rotTimer=setTimeout(()=>{world.controls().autoRotate=true;},4000); }
+  const pauseRotate  = () => { world.controls().autoRotate=false; clearTimeout(rotTimer); };
+  const resumeRotate = () => { rotTimer=setTimeout(()=>{world.controls().autoRotate=true;},4000); };
   const globeEl = document.getElementById('globe');
   globeEl.addEventListener('pointerdown', pauseRotate);
   globeEl.addEventListener('pointerup',   resumeRotate);
   globeEl.addEventListener('wheel',       pauseRotate);
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
   function parseSqft(v){if(!v)return null;const m=String(v).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/);return m?+m[1]:null}
   function parseMW(v)  {if(!v)return null;const m=String(v).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/);return m?+m[1]:null}
   function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+  function fmtCount(n){return n>=1000?Math.round(n/100)/10+'k':String(n);}
 
   // ── Popup ─────────────────────────────────────────────────────────────────
   const popupEl=document.getElementById('popup'), ttEl=document.getElementById('tooltip');
@@ -211,10 +236,10 @@ window.addEventListener('load', function () {
           <div class="piw"><img src="${esc(d.image_url)}" alt="" onload="this.classList.add('loaded')" onerror="this.parentElement.innerHTML='<span class=pph>No image</span>'"/><div class="pil">Official</div></div>
           <a class="piw pph" href="${esc(svUrl)}" target="_blank" rel="noopener">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
-            Compare &rarr;<div class="pil">Street View</div>
+            Compare &#x2192;<div class="pil">Street View</div>
           </a></div>
-        <div class="ppn">&#128248; Promotional image &mdash; datacenters.com
-          <a class="psv" href="${esc(svUrl)}" target="_blank" rel="noopener">Compare with Street View &rarr;</a>
+        <div class="ppn">&#128248; Promotional image &#8212; datacenters.com
+          <a class="psv" href="${esc(svUrl)}" target="_blank" rel="noopener">Compare with Street View &#x2192;</a>
         </div>`;
       } else {
         top=`<div class="pi one"><div class="piw"><img src="${esc(d.image_url)}" alt="" onload="this.classList.add('loaded')" onerror="this.parentElement.innerHTML='<span class=pph>No image</span>'"/><div class="pil">Official</div></div></div>
@@ -237,56 +262,108 @@ window.addEventListener('load', function () {
       popupEl.style.left=x+'px'; popupEl.style.top=y+'px';
     });
   }
-  function onPointClick(d,ev){ pauseRotate(); showPopup(d,ev.clientX,ev.clientY); }
+
+  function onPointClick(d,ev){
+    const alt=world.pointOfView().altitude;
+    pauseRotate();
+    if(alt>CLUSTER_ALT){
+      // Cluster: fly in to expand
+      world.pointOfView({lat:d.lat,lng:d.lng,altitude:CLUSTER_ALT*0.55},800);
+    } else {
+      showPopup(d,ev.clientX,ev.clientY);
+    }
+  }
   function onPointHover(d){
     globeEl.style.cursor=d?'pointer':'default';
-    if(d){ttEl.textContent=d.name;ttEl.style.display='block';}
+    const alt=world.pointOfView().altitude;
+    if(d&&alt<=CLUSTER_ALT){ttEl.textContent=d.name;ttEl.style.display='block';}
     else ttEl.style.display='none';
   }
   globeEl.addEventListener('mousemove',ev=>{ttEl.style.left=(ev.clientX+14)+'px';ttEl.style.top=(ev.clientY-32)+'px';});
   globeEl.addEventListener('click',ev=>{if(ev.target.tagName==='CANVAS')popupEl.style.display='none';});
 
-  // ── City dataset (embedded, 494 cities across 3 tiers) ───────────────────
+  // ── City label dataset (494 cities, 3 tiers) ─────────────────────────────
 const T1=[['Tokyo',35.68,139.69],['Delhi',28.61,77.21],['Shanghai',31.22,121.46],['Sao Paulo',-23.55,-46.63],['Mexico City',19.43,-99.13],['Cairo',30.04,31.24],['Mumbai',19.08,72.88],['Beijing',39.91,116.39],['Dhaka',23.73,90.4],['Osaka',34.69,135.5],['New York',40.71,-74.01],['Karachi',24.86,67.01],['Chongqing',29.56,106.55],['Buenos Aires',-34.61,-58.37],['Istanbul',41.01,28.95],['Kolkata',22.57,88.36],['Lagos',6.45,3.47],['Kinshasa',-4.32,15.32],['Manila',14.6,120.98],['Guangzhou',23.13,113.27],['Rio de Janeiro',-22.91,-43.17],['Moscow',55.75,37.62],['Lahore',31.56,74.34],['Shenzhen',22.54,114.06],['Bangalore',12.97,77.59],['Jakarta',-6.21,106.85],['Chennai',13.08,80.27],['Lima',-12.07,-77.04],['Paris',48.86,2.35],['Bogota',4.71,-74.07],['London',51.51,-0.13],['Hyderabad',17.39,78.49],['Tehran',35.69,51.42],['Bangkok',13.75,100.52],['Seoul',37.57,126.98],['Wuhan',30.58,114.27],['Chicago',41.88,-87.63],['Johannesburg',-26.2,28.04],['Baghdad',33.34,44.4],['Santiago',-33.46,-70.65],['Toronto',43.7,-79.42],['Nairobi',-1.28,36.82],['Madrid',40.42,-3.7],['Los Angeles',34.05,-118.24],['Chengdu',30.66,104.07],['Riyadh',24.69,46.72],['Sydney',-33.87,151.21],['Singapore',1.29,103.86],['Berlin',52.52,13.4],['Ho Chi Minh City',10.82,106.63],['Luanda',-8.84,13.23],['Washington',38.91,-77.04],['Addis Ababa',9.02,38.74],['Dar es Salaam',-6.79,39.21],['Yangon',16.85,96.18],['Nanjing',32.06,118.79],['Rome',41.9,12.49],['Harbin',45.75,126.65],['Hangzhou',30.27,120.15],['Casablanca',33.59,-7.62],['Accra',5.56,-0.2],['Dubai',25.07,55.14],['Ankara',39.93,32.86],['Islamabad',33.73,73.09],['Taipei',25.05,121.53],['Khartoum',15.56,32.53],['Melbourne',-37.81,144.96],['Abidjan',5.35,-4.02],['Kyiv',50.45,30.52],['Kuala Lumpur',3.15,101.69],['Hanoi',21.03,105.85],['Shenyang',41.8,123.43],['Montreal',45.51,-73.55],['Barcelona',41.39,2.15],['Ahmedabad',23.03,72.59],['Milan',45.46,9.19],['Surat',21.17,72.83],['Pune',18.52,73.86],['Colombo',6.93,79.85],['Kabul',34.52,69.18],['Kampala',0.32,32.58],['Phnom Penh',11.57,104.92],['Minsk',53.9,27.57],['Vienna',48.21,16.37],['Warsaw',52.23,21.01],['Amman',31.95,35.93],['Doha',25.29,51.53],['Jeddah',21.54,39.17],['Cape Town',-33.93,18.42],['Auckland',-36.87,174.77],['Dakar',14.69,-17.44],['Baku',40.41,49.87],['Tbilisi',41.69,44.83],['Tashkent',41.3,69.27],['Almaty',43.25,76.95],['Kathmandu',27.72,85.32]];
 const T2=[['Guadalajara',20.67,-103.33],['Monterrey',25.68,-100.32],['Puebla',19.05,-98.21],['Vancouver',49.25,-123.12],['Calgary',51.05,-114.07],['Edmonton',53.55,-113.49],['Ottawa',45.42,-75.7],['Winnipeg',49.9,-97.14],['Houston',29.76,-95.37],['Phoenix',33.45,-112.07],['Philadelphia',39.95,-75.17],['San Antonio',29.42,-98.49],['Dallas',32.79,-96.77],['San Francisco',37.77,-122.42],['Seattle',47.61,-122.33],['Denver',39.74,-104.98],['Miami',25.77,-80.19],['Atlanta',33.75,-84.39],['Minneapolis',44.98,-93.27],['Portland',45.52,-122.68],['Tampa',27.95,-82.46],['Las Vegas',36.17,-115.14],['St. Louis',38.63,-90.2],['Pittsburgh',40.44,-79.99],['Kansas City',39.1,-94.58],['Charlotte',35.23,-80.84],['Indianapolis',39.77,-86.16],['Nashville',36.17,-86.78],['San Diego',32.72,-117.15],['Belo Horizonte',-19.93,-43.94],['Porto Alegre',-30.03,-51.23],['Curitiba',-25.43,-49.27],['Brasilia',-15.78,-47.93],['Fortaleza',-3.73,-38.52],['Manaus',-3.1,-60.02],['Salvador',-12.97,-38.5],['Recife',-8.05,-34.88],['Cordoba',-31.42,-64.18],['Rosario',-32.95,-60.65],['Mendoza',-32.89,-68.85],['Medellin',6.25,-75.57],['Cali',3.44,-76.52],['Barranquilla',10.96,-74.8],['Arequipa',-16.41,-71.54],['Concepcion',-36.82,-73.06],['Caracas',10.48,-66.9],['Quito',-0.23,-78.52],['Guayaquil',-2.17,-79.92],['Havana',23.13,-82.38],['Hamburg',53.55,10.0],['Munich',48.14,11.58],['Cologne',50.94,6.96],['Frankfurt',50.11,8.68],['Stuttgart',48.78,9.18],['Leipzig',51.34,12.37],['Dresden',51.05,13.74],['Dortmund',51.52,7.47],['Bremen',53.08,8.81],['Nuremberg',49.45,11.08],['Marseille',43.3,5.37],['Lyon',45.74,4.84],['Toulouse',43.6,1.44],['Bordeaux',44.84,-0.58],['Lille',50.63,3.07],['Nice',43.71,7.26],['Nantes',47.22,-1.55],['Birmingham',52.48,-1.89],['Manchester',53.48,-2.24],['Glasgow',55.86,-4.25],['Leeds',53.8,-1.55],['Liverpool',53.41,-2.99],['Edinburgh',55.95,-3.19],['Naples',40.85,14.27],['Turin',45.07,7.68],['Palermo',38.12,13.36],['Genoa',44.41,8.93],['Bologna',44.49,11.34],['Florence',43.77,11.26],['Valencia',39.47,-0.37],['Seville',37.39,-5.99],['Zaragoza',41.65,-0.89],['Bilbao',43.26,-2.93],['Krakow',50.06,19.95],['Lodz',51.76,19.46],['Wroclaw',51.11,17.04],['Gdansk',54.35,18.65],['Kharkiv',49.99,36.23],['Odesa',46.48,30.73],['Dnipro',48.46,34.98],['Lviv',49.84,24.03],['Budapest',47.5,19.04],['Prague',50.09,14.42],['Bratislava',48.15,17.11],['Zagreb',45.81,15.98],['Belgrade',44.8,20.46],['Sofia',42.7,23.32],['Bucharest',44.43,26.1],['Athens',37.98,23.73],['Amsterdam',52.37,4.9],['Rotterdam',51.92,4.48],['Stockholm',59.33,18.07],['Gothenburg',57.71,11.97],['Oslo',59.91,10.75],['Copenhagen',55.68,12.57],['Helsinki',60.17,24.94],['Lisbon',38.72,-9.14],['Porto',41.16,-8.63],['Brussels',50.85,4.35],['Zurich',47.38,8.54],['Geneva',46.2,6.14],['Dublin',53.33,-6.25],['Ulaanbaatar',47.91,106.88],['Pyongyang',39.03,125.75],['Busan',35.1,129.04],['Nagoya',35.18,136.91],['Sapporo',43.06,141.35],['Fukuoka',33.6,130.42],['Yokohama',35.44,139.64],['Kobe',34.69,135.2],['Kyoto',35.01,135.77],['Surabaya',-7.25,112.75],['Bandung',-6.92,107.61],['Medan',3.59,98.67],['Makassar',-5.13,119.41],['Cebu',10.31,123.89],['Davao',7.07,125.61],['Da Nang',16.07,108.22],['Hai Phong',20.86,106.68],['Faisalabad',31.42,73.09],['Rawalpindi',33.6,73.04],['Peshawar',34.01,71.57],['Chittagong',22.34,91.84],['Mashhad',36.31,59.6],['Isfahan',32.66,51.68],['Tabriz',38.07,46.3],['Shiraz',29.62,52.54],['Mosul',36.34,43.13],['Basra',30.51,47.82],['Tel Aviv',32.08,34.78],['Haifa',32.82,34.99],['Jerusalem',31.77,35.22],['Beirut',33.89,35.5],['Kuwait City',29.37,47.98],['Muscat',23.59,58.59],['Abu Dhabi',24.47,54.37],['Sharjah',25.36,55.42],['Sanaa',15.37,44.19],['Izmir',38.41,27.14],['Bursa',40.19,29.07],['Antalya',36.9,30.7],['Adana',37.0,35.32],['Gaziantep',37.07,37.38],['Kano',12.0,8.52],['Ibadan',7.39,3.9],['Abuja',9.07,7.4],['Port Harcourt',4.82,7.05],['Mombasa',-4.05,39.67],['Kigali',-1.95,30.06],['Harare',-17.83,31.05],['Lusaka',-15.42,28.28],['Maputo',-25.97,32.59],['Antananarivo',-18.91,47.54],['Bamako',12.65,-8.0],['Ouagadougou',12.37,-1.53],['Niamey',13.52,2.11],['Yaunde',3.87,11.52],['Douala',4.05,9.7],['Mogadishu',2.05,45.34],['Tripoli',32.9,13.18],['Algiers',36.74,3.06],['Tunis',36.82,10.17],['Novosibirsk',54.99,82.9],['Yekaterinburg',56.84,60.6],['Nizhny Novgorod',56.33,44.0],['Kazan',55.79,49.12],['Chelyabinsk',55.16,61.4],['Omsk',54.99,73.37],['Samara',53.2,50.15],['Rostov-on-Don',47.23,39.72],['Krasnoyarsk',56.01,92.85],['Volgograd',48.72,44.5],['Krasnodar',45.03,38.98],['Yerevan',40.18,44.51],['Bishkek',42.87,74.59],['Brisbane',-27.47,153.03],['Perth',-31.95,115.86],['Adelaide',-34.93,138.6],['Wellington',-41.29,174.78],['Christchurch',-43.53,172.64]];
 const T3=[['Jacksonville',30.33,-81.66],['Memphis',35.15,-90.05],['Baltimore',39.29,-76.61],['El Paso',31.76,-106.49],['Oklahoma City',35.47,-97.52],['Sacramento',38.58,-121.49],['Omaha',41.26,-95.94],['Raleigh',35.78,-78.64],['Milwaukee',43.04,-87.91],['Albuquerque',35.1,-106.65],['Louisville',38.25,-85.76],['Tucson',32.22,-110.97],['Fresno',36.74,-119.77],['Mesa',33.42,-111.83],['Honolulu',21.31,-157.86],['Quebec City',46.81,-71.21],['Halifax',44.65,-63.57],['Victoria (Canada)',48.43,-123.37],['Goiania',-16.69,-49.25],['Campinas',-22.91,-47.06],['Manaus',-3.1,-60.02],['Maceio',-9.67,-35.74],['Campo Grande',-20.44,-54.65],['Cuiaba',-15.6,-56.1],['Tucuman',-26.82,-65.22],['La Plata',-34.92,-57.95],['Cartagena',10.39,-75.48],['Trujillo',-8.11,-79.03],['Chiclayo',-6.77,-79.84],['Cochabamba',-17.39,-66.16],['Santa Cruz de la Sierra',-17.79,-63.18],['Asuncion',-25.29,-57.65],['Montevideo',-34.91,-56.19],['La Paz',-16.5,-68.15],['Valencia (VE)',10.16,-67.99],['Maracaibo',10.63,-71.64],['Hannover',52.37,9.74],['Augsburg',48.37,10.9],['Munster',51.96,7.63],['Duisburg',51.43,6.76],['Mannheim',49.49,8.47],['Gelsenkirchen',51.52,7.09],['Rennes',48.11,-1.68],['Grenoble',45.19,5.72],['Montpellier',43.61,3.87],['Sheffield',53.38,-1.47],['Bristol',51.45,-2.6],['Nottingham',52.95,-1.15],['Cardiff',51.48,-3.18],['Belfast',54.6,-5.93],['Newcastle (UK)',54.98,-1.62],['Catania',37.5,15.09],['Bari',41.12,16.87],['Verona',45.44,10.99],['Cagliari',39.22,9.12],['Alicante',38.35,-0.48],['Valladolid',41.65,-4.72],['Malaga',36.72,-4.42],['Las Palmas',28.12,-15.43],['Katowice',50.26,19.02],['Lublin',51.25,22.57],['Bialystok',53.13,23.17],['Vilnius',54.69,25.28],['Riga',56.95,24.11],['Tallinn',59.44,24.75],['Plovdiv',42.15,24.75],['Varna',43.22,27.91],['Timisoara',45.75,21.23],['Cluj-Napoca',46.77,23.6],['Iasi',47.16,27.59],['Brno',49.2,16.61],['Ljubljana',46.06,14.51],['Sarajevo',43.84,18.36],['Skopje',42.0,21.43],['Tirana',41.33,19.82],['Chisinau',47.01,28.86],['Thessaloniki',40.64,22.94],['Vilnius',54.69,25.28],['Ufa',54.74,55.97],['Perm',58.01,56.23],['Voronezh',51.67,39.19],['Saratov',51.54,46.01],['Izhevsk',56.85,53.22],['Barnaul',53.35,83.74],['Reykjavik',64.13,-21.82],['Luxembourg',49.61,6.13],['Bern',46.95,7.45],['Basel',47.56,7.59],['Antwerp',51.22,4.4],['Ghent',51.05,3.72],['Xi\'an',34.34,108.94],['Dongguan',23.02,113.75],['Foshan',23.03,113.13],['Jinan',36.67,117.0],['Zhengzhou',34.76,113.65],['Changsha',28.23,112.93],['Kunming',25.05,102.72],['Changchun',43.88,125.35],['Dalian',38.91,121.6],['Ningbo',29.86,121.55],['Qingdao',36.07,120.38],['Hefei',31.86,117.28],['Nanchang',28.68,115.88],['Shijiazhuang',38.05,114.48],['Guiyang',26.6,106.71],['Taiyuan',37.87,112.55],['Lanzhou',36.06,103.79],['Urumqi',43.8,87.6],['Nanning',22.82,108.32],['Xiamen',24.48,118.08],['Wenzhou',28.01,120.65],['Fuzhou',26.08,119.3],['Suzhou',31.3,120.62],['Tangshan',39.63,118.18],['Kawasaki',35.52,139.72],['Hiroshima',34.4,132.46],['Kitakyushu',33.88,130.88],['Niigata',37.92,139.04],['Hamamatsu',34.71,137.73],['Shizuoka',34.98,138.38],['Incheon',37.46,126.71],['Daegu',35.87,128.6],['Daejeon',36.35,127.38],['Gwangju',35.16,126.85],['Suwon',37.26,127.0],['Ulsan',35.54,129.31],['Semarang',-7.0,110.42],['Palembang',-2.99,104.76],['Batam',1.13,104.04],['Malang',-7.97,112.63],['Zamboanga',6.91,122.08],['Iloilo',10.7,122.56],['Chiang Mai',18.79,98.98],['Nakhon Ratchasima',14.97,102.1],['Multan',30.2,71.47],['Gujranwala',32.16,74.18],['Quetta',30.19,67.01],['Chittagong',22.34,91.84],['Khulna',22.8,89.57],['Rajshahi',24.37,88.6],['Jaipur',26.92,75.82],['Lucknow',26.85,80.95],['Kanpur',26.47,80.33],['Nagpur',21.15,79.08],['Thane',19.2,72.98],['Indore',22.72,75.86],['Visakhapatnam',17.69,83.22],['Patna',25.61,85.14],['Vadodara',22.31,73.19],['Bhopal',23.26,77.41],['Coimbatore',11.02,76.97],['Agra',27.18,78.01],['Nashik',19.99,73.79],['Varanasi',25.32,83.01],['Srinagar',34.08,74.8],['Aurangabad',19.88,75.34],['Amritsar',31.63,74.87],['Jodhpur',26.3,73.02],['Vijayawada',16.51,80.64],['Madurai',9.93,78.12],['Ranchi',23.35,85.33],['Ahvaz',31.32,48.68],['Qom',34.64,50.88],['Karaj',35.84,50.94],['Erbil',36.19,44.01],['Damascus',33.51,36.29],['Aleppo',36.2,37.16],['Homs',34.73,36.71],['Aden',12.79,45.04],['Amman',31.95,35.93],['Zarqa',32.07,36.09],['Nicosia',35.17,33.37],['Tripoli (LB)',34.43,35.85],['Constantine',36.37,6.61],['Oran',35.7,-0.63],['Sfax',34.74,10.76],['Marrakesh',31.63,-7.99],['Fez',34.05,-5.0],['Tangier',35.77,-5.8],['Kano',12.0,8.52],['Kaduna',10.52,7.44],['Benin City',6.34,5.63],['Mombasa',-4.05,39.67],['Nakuru',-0.28,36.07],['Kisumu',-0.1,34.75],['Ndola',-12.96,28.64],['Blantyre',-15.79,35.0],['Lilongwe',-13.97,33.79],['Bulawayo',-20.15,28.58],['Gaborone',-24.65,25.91],['Windhoek',-22.56,17.08],['Bujumbura',-3.39,29.36],['Juba',4.85,31.6],['Lome',6.14,1.22],['Cotonou',6.37,2.42],['Freetown',8.49,-13.23],['Monrovia',6.3,-10.8],['Conakry',9.54,-13.68],['Bissau',11.86,-15.6],['Lubumbashi',-11.66,27.48],['Mbuji-Mayi',-6.15,23.59],['Kisangani',0.52,25.19],['Gold Coast',-28.0,153.43],['Newcastle (AU)',-32.93,151.78],['Canberra',-35.28,149.13],['Hamilton (NZ)',-37.79,175.28],['Tauranga',-37.69,176.17],['Port Moresby',-9.44,147.18],['Suva',-18.14,178.44]];
 
-  function mklabels(arr,tier,maxAlt){return arr.map(([name,lat,lng])=>({name,lat,lng,tier,maxAlt}));}
-  const CL1=mklabels(T1,'c1',1.5), CL2=mklabels(T2,'c2',0.5), CL3=mklabels(T3,'c3',0.18);
+
+  function mklabels(arr,tier){return arr.map(([name,lat,lng])=>({name,lat,lng,tier}));}
+  const CL1=mklabels(T1,'c1'), CL2=mklabels(T2,'c2'), CL3=mklabels(T3,'c3');
   let countryLabels=[];
 
-  function labelSz(d){return{country:0.72,c1:0.50,c2:0.38,c3:0.28}[d.tier]||0.35;}
-  function labelCol(d){return{country:'rgba(200,215,230,0.82)',c1:'rgba(175,190,210,0.74)',c2:'rgba(150,168,190,0.65)',c3:'rgba(120,140,165,0.56)'}[d.tier]||'rgba(160,180,200,0.6)';}
-
-  let lastAlt=-1;
-  function updateLabels(alt){
-    if(Math.abs(alt-lastAlt)<0.04)return;
-    lastAlt=alt;
+  // ── Unified label builder (country names + city names + cluster counts) ───
+  function buildAllLabels(alt, mode, clusters){
     let labels=[...countryLabels];
-    if(alt<1.5)labels=labels.concat(CL1);
-    if(alt<0.5)labels=labels.concat(CL2);
-    if(alt<0.18)labels=labels.concat(CL3);
-    world.labelsData(labels).labelText('name').labelSize(labelSz).labelColor(labelCol)
-         .labelAltitude(0.002).labelResolution(2).labelDotRadius(0);
+    if(mode==='cluster' && clusters.length){
+      // Count numbers float above cluster dots
+      labels=labels.concat(clusters.map(d=>({
+        name:fmtCount(d.count), lat:d.lat, lng:d.lng, tier:'count'
+      })));
+    } else {
+      // City labels when in individual mode
+      if(alt<1.5) labels=labels.concat(CL1);
+      if(alt<0.5) labels=labels.concat(CL2);
+      if(alt<0.18)labels=labels.concat(CL3);
+    }
+    return labels;
   }
+
+  function applyLabels(labels){
+    world
+      .labelsData(labels)
+      .labelText('name')
+      .labelSize(d=>({country:0.72,c1:0.50,c2:0.38,c3:0.28,count:0.48}[d.tier]||0.35))
+      .labelColor(d=>({
+        country:'rgba(200,215,230,0.82)',
+        c1:'rgba(175,190,210,0.74)',
+        c2:'rgba(150,168,190,0.65)',
+        c3:'rgba(120,140,165,0.56)',
+        count:'rgba(255,255,255,0.92)',
+      }[d.tier]||'rgba(160,180,200,0.6)'))
+      .labelAltitude(d=>d.tier==='count'?0.065:0.002)
+      .labelResolution(2)
+      .labelDotRadius(0);
+  }
+
   function updateLegend(alt){
     const s=document.getElementById('precision-section'), h=document.getElementById('zoom-hint');
     s.style.opacity=alt<=CZ?'1':'0.4'; h.style.display=alt<=CZ?'none':'inline';
   }
-  world.controls().addEventListener('change',()=>{
-    const alt=world.pointOfView().altitude;
-    updateLabels(alt); updateLegend(alt);
-  });
-  updateLabels(2.2); updateLegend(2.2);
 
-  // ── Country borders + country name labels ─────────────────────────────────
+  // ── Cluster mode helpers ──────────────────────────────────────────────────
+  function buildClusters(points){
+    const map={};
+    points.forEach(d=>{
+      if(!map[d.country])map[d.country]={lat:0,lng:0,count:0,country:d.country};
+      map[d.country].lat+=d.lat; map[d.country].lng+=d.lng; map[d.country].count++;
+    });
+    return Object.values(map).map(c=>({...c,lat:c.lat/c.count,lng:c.lng/c.count}));
+  }
+
+  function showClusters(clusters){
+    world
+      .pointsData(clusters)
+      .pointRadius(d=>Math.min(Math.sqrt(d.count)*0.12,3.5))
+      .pointColor(()=>'#ffb946')
+      .pointAltitude(0.005);
+  }
+  function showIndividual(points){
+    world
+      .pointsData(points)
+      .pointRadius(0.22)
+      .pointColor(d=>({address:'#00ff88',city:'#fbbf24',country:'#f87171'}[d.tier]||'#f87171'))
+      .pointAltitude(0.008);
+  }
+
+  // ── Country polygon borders ───────────────────────────────────────────────
   fetch('https://cdn.jsdelivr.net/gh/datasets/geo-countries@master/data/countries.geojson')
     .then(r=>r.json())
     .then(gd=>{
       world.polygonsData(gd.features)
            .polygonCapColor(()=>'rgba(0,0,0,0)')
            .polygonSideColor(()=>'rgba(0,0,0,0)')
-           .polygonStrokeColor(()=>'rgba(75,95,115,0.4)')
+           .polygonStrokeColor(()=>'rgba(80,108,135,0.5)')
            .polygonAltitude(()=>0.001);
       countryLabels=gd.features.map(f=>{
         const name=f.properties.ADMIN||f.properties.name||'';
@@ -298,34 +375,47 @@ const T3=[['Jacksonville',30.33,-81.66],['Memphis',35.15,-90.05],['Baltimore',39
         if(!ring||ring.length<3)return null;
         const lat=ring.reduce((s,c)=>s+c[1],0)/ring.length;
         const lng=ring.reduce((s,c)=>s+c[0],0)/ring.length;
-        return {name,lat,lng,tier:'country',maxAlt:99};
+        return{name,lat,lng,tier:'country'};
       }).filter(Boolean);
-      updateLabels(world.pointOfView().altitude);
+      // Refresh labels now country names are available
+      const alt=world.pointOfView().altitude;
+      const mode=alt>CLUSTER_ALT?'cluster':'individual';
+      applyLabels(buildAllLabels(alt,mode,currentClusters));
     })
     .catch(e=>console.warn('Country borders unavailable:',e));
 
-  // ── GeoJSON data centers ──────────────────────────────────────────────────
-  let allPoints=[], countries=new Set(), countryCounts={};
+  // ── Data loading ──────────────────────────────────────────────────────────
+  let allPoints=[], currentFiltered=[], currentClusters=[];
+  let countries=new Set(), countryCounts={};
+  let lastMode='cluster';
 
   fetch('datacenters.geojson')
     .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
     .then(geojson=>{
       const feats=geojson.features||[], tiers={address:0,city:0,country:0};
       allPoints=feats.map(f=>{
-        const p=f.properties, t=p.tier||'country';
+        const p=f.properties,t=p.tier||'country';
         if(t in tiers)tiers[t]++;
         countries.add(p.country); countryCounts[p.country]=(countryCounts[p.country]||0)+1;
         return{lat:f.geometry.coordinates[1],lng:f.geometry.coordinates[0],...p,
                _sp:parseSqft(p['total space']),_co:parseSqft(p['colocation space']),_pw:parseMW(p['total power'])};
       });
-      world.pointsData(allPoints);
-      document.getElementById('header-count').innerHTML=`<span>${feats.length.toLocaleString()}</span> data centers &middot; <span>${countries.size}</span> countries`;
+      currentFiltered=allPoints;
+      currentClusters=buildClusters(allPoints);
+
+      // Start in cluster mode
+      showClusters(currentClusters);
+      applyLabels(buildAllLabels(2.2,'cluster',currentClusters));
+      updateLegend(2.2);
+
+      document.getElementById('header-count').innerHTML=
+        `<span>${feats.length.toLocaleString()}</span> data centers &middot; <span>${countries.size}</span> countries`;
       document.getElementById('cnt-address').textContent=tiers.address.toLocaleString();
       document.getElementById('cnt-city').textContent=tiers.city.toLocaleString();
       document.getElementById('cnt-country').textContent=tiers.country.toLocaleString();
       const total=feats.length;
       [['cov-space','total space'],['cov-colo','colocation space'],['cov-power','total power']].forEach(([id,key])=>{
-        const n=allPoints.filter(d=>d[key]).length, pct=Math.round(n/total*100);
+        const n=allPoints.filter(d=>d[key]).length,pct=Math.round(n/total*100);
         const el=document.getElementById(id);
         el.textContent=pct+'% of DCs';
         el.className='cb '+(pct>=60?'hi':pct>=30?'me':'lo');
@@ -335,6 +425,27 @@ const T3=[['Jacksonville',30.33,-81.66],['Memphis',35.15,-90.05],['Baltimore',39
         .forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c+' ('+(countryCounts[c]||0).toLocaleString()+')';sel.appendChild(o);});
     })
     .catch(err=>{document.getElementById('header-count').textContent='Could not load datacenters.geojson';console.error(err);});
+
+  // ── Camera change → switch modes + update labels ──────────────────────────
+  let labelRaf;
+  world.controls().addEventListener('change',()=>{
+    const alt=world.pointOfView().altitude;
+    const mode=alt>CLUSTER_ALT?'cluster':'individual';
+
+    if(mode!==lastMode){
+      lastMode=mode;
+      if(mode==='cluster'){
+        showClusters(currentClusters);
+      } else {
+        showIndividual(currentFiltered);
+      }
+      updateLegend(alt);
+    }
+
+    // Throttle label updates
+    cancelAnimationFrame(labelRaf);
+    labelRaf=requestAnimationFrame(()=>applyLabels(buildAllLabels(alt,mode,currentClusters)));
+  });
 
   // ── Search ────────────────────────────────────────────────────────────────
   const searchEl=document.getElementById('search'), clearBtn=document.getElementById('clear-btn');
@@ -354,7 +465,7 @@ const T3=[['Jacksonville',30.33,-81.66],['Memphis',35.15,-90.05],['Baltimore',39
   document.addEventListener('click',e=>{if(!document.getElementById('search-container').contains(e.target))closeDD();});
 
   function buildDD(q){
-    const ql=q.toLowerCase(), parts=[];
+    const ql=q.toLowerCase(),parts=[];
     const cm=[...countries].filter(c=>c.toLowerCase().includes(ql)).sort((a,b)=>(countryCounts[b]||0)-(countryCounts[a]||0)).slice(0,5);
     if(cm.length){
       parts.push('<div class="sd-lbl">Countries</div>');
@@ -371,11 +482,11 @@ const T3=[['Jacksonville',30.33,-81.66],['Memphis',35.15,-90.05],['Baltimore',39
     dd.innerHTML=parts.join('');
     openDD();
     dd.querySelectorAll('.sd-item[data-type="country"]').forEach(el=>el.addEventListener('click',()=>{
-      closeDD(); searchEl.value=el.dataset.val; clearBtn.style.display='block'; flyToCountry(el.dataset.val);
+      closeDD();searchEl.value=el.dataset.val;clearBtn.style.display='block';flyToCountry(el.dataset.val);
     }));
     dd.querySelectorAll('.sd-item[data-type="dc"]').forEach(el=>el.addEventListener('click',()=>{
-      const d=allPoints[+el.dataset.idx]; if(!d)return;
-      closeDD(); searchEl.value=''; clearBtn.style.display='none'; pauseRotate();
+      const d=allPoints[+el.dataset.idx];if(!d)return;
+      closeDD();searchEl.value='';clearBtn.style.display='none';pauseRotate();
       world.pointOfView({lat:d.lat,lng:d.lng,altitude:0.08},1400);
       setTimeout(()=>showPopup(d,window.innerWidth/2,window.innerHeight/2+60),900);
     }));
@@ -388,9 +499,8 @@ const T3=[['Jacksonville',30.33,-81.66],['Memphis',35.15,-90.05],['Baltimore',39
     activeCountry=country; applyFilters();
     const pts=allPoints.filter(d=>d.country===country);
     if(!pts.length)return;
-    const lats=pts.map(d=>d.lat), lngs=pts.map(d=>d.lng);
-    const clat=(Math.min(...lats)+Math.max(...lats))/2;
-    const clng=(Math.min(...lngs)+Math.max(...lngs))/2;
+    const lats=pts.map(d=>d.lat),lngs=pts.map(d=>d.lng);
+    const clat=(Math.min(...lats)+Math.max(...lats))/2, clng=(Math.min(...lngs)+Math.max(...lngs))/2;
     const span=Math.max(Math.max(...lats)-Math.min(...lats),Math.max(...lngs)-Math.min(...lngs));
     const alt=span>60?2.0:span>30?1.2:span>10?0.7:span>3?0.35:0.18;
     world.pointOfView({lat:clat,lng:clng,altitude:alt},1200);
@@ -402,11 +512,10 @@ const T3=[['Jacksonville',30.33,-81.66],['Memphis',35.15,-90.05],['Baltimore',39
       .then(r=>r.json())
       .then(res=>{
         if(!res.length){alert('No place found for "'+q+'"');return;}
-        const r=res[0], bb=r.boundingbox.map(parseFloat);
-        const lat=(bb[0]+bb[1])/2, lng=(bb[2]+bb[3])/2;
+        const r=res[0],bb=r.boundingbox.map(parseFloat);
         const span=Math.max(bb[1]-bb[0],bb[3]-bb[2]);
         const alt=span>60?2.2:span>20?1.4:span>5?0.7:span>1?0.3:span>0.1?0.1:0.04;
-        world.pointOfView({lat,lng,altitude:alt},1400);
+        world.pointOfView({lat:(bb[0]+bb[1])/2,lng:(bb[2]+bb[3])/2,altitude:alt},1400);
       })
       .catch(()=>alert('Place search failed.'));
   }
@@ -420,18 +529,25 @@ const T3=[['Jacksonville',30.33,-81.66],['Memphis',35.15,-90.05],['Baltimore',39
            pw:{min:n(document.getElementById('power-min').value),max:n(document.getElementById('power-max').value),req:document.getElementById('power-req').checked}};
   }
   function okSpec(val,f){
-    if(f.req&&val===null)return false; if(val===null)return true;
-    if(f.min!==null&&val<f.min)return false; if(f.max!==null&&val>f.max)return false;
+    if(f.req&&val===null)return false;if(val===null)return true;
+    if(f.min!==null&&val<f.min)return false;if(f.max!==null&&val>f.max)return false;
     return true;
   }
   function applyFilters(){
-    const q=activeSearch.toLowerCase().trim(), s=getSpec();
+    const q=activeSearch.toLowerCase().trim(),s=getSpec();
     const m=allPoints.filter(d=>{
       if(activeCountry&&d.country!==activeCountry)return false;
       if(q&&![(d.name||''),(d.country||''),(d.address||'')].some(t=>t.toLowerCase().includes(q)))return false;
       return okSpec(d._sp,s.sp)&&okSpec(d._co,s.co)&&okSpec(d._pw,s.pw);
     });
-    world.pointsData(m); popupEl.style.display='none';
+    currentFiltered=m;
+    currentClusters=buildClusters(m);
+    const alt=world.pointOfView().altitude;
+    const mode=alt>CLUSTER_ALT?'cluster':'individual';
+    lastMode=mode;
+    if(mode==='cluster') showClusters(currentClusters); else showIndividual(currentFiltered);
+    applyLabels(buildAllLabels(alt,mode,currentClusters));
+    popupEl.style.display='none';
     const hasF=q||activeCountry||Object.values(s).some(f=>f.min!==null||f.max!==null||f.req);
     const info=document.getElementById('result-info');
     if(hasF){info.style.display='block';info.textContent=m.length.toLocaleString()+' results';}
@@ -440,8 +556,7 @@ const T3=[['Jacksonville',30.33,-81.66],['Memphis',35.15,-90.05],['Baltimore',39
 
   clearBtn.addEventListener('click',()=>{searchEl.value='';activeSearch='';clearBtn.style.display='none';closeDD();applyFilters();});
   document.getElementById('country-select').addEventListener('change',e=>{
-    if(e.target.value)flyToCountry(e.target.value);
-    else{activeCountry='';applyFilters();}
+    if(e.target.value)flyToCountry(e.target.value);else{activeCountry='';applyFilters();}
   });
   document.getElementById('spec-toggle').addEventListener('click',function(){this.classList.toggle('open');document.getElementById('spec-panel').classList.toggle('open');});
   ['space-min','space-max','colo-min','colo-max','power-min','power-max'].forEach(id=>document.getElementById(id).addEventListener('input',applyFilters));
@@ -452,7 +567,10 @@ const T3=[['Jacksonville',30.33,-81.66],['Memphis',35.15,-90.05],['Baltimore',39
     document.getElementById('result-info').style.display='none';
     ['space-min','space-max','colo-min','colo-max','power-min','power-max'].forEach(id=>document.getElementById(id).value='');
     ['space-req','colo-req','power-req'].forEach(id=>document.getElementById(id).checked=false);
-    world.pointsData(allPoints); popupEl.style.display='none';
+    currentFiltered=allPoints; currentClusters=buildClusters(allPoints); lastMode='cluster';
+    showClusters(currentClusters);
+    applyLabels(buildAllLabels(2.2,'cluster',currentClusters));
+    popupEl.style.display='none';
     world.pointOfView({lat:20,lng:10,altitude:2.2},1200);
   });
 
