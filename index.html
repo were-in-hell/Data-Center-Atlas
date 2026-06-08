@@ -198,6 +198,7 @@ window.addEventListener('load', function () {
     minZoom: 1,
     maxZoom: 19,
     zoomControl: false,
+    worldCopyJump: true,  // snap back when panning into a repeated world copy
   });
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   // Primary: CARTO dark matter (no retina suffix to keep URL simple)
