@@ -152,76 +152,328 @@ select option{background:#0b0f1a}
 <div id="popup"></div>
 <div id="tooltip"></div>
 
-<script src="https://unpkg.com/globe.gl"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-geo@3/dist/d3-geo.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 <script>
 window.addEventListener('load', function () {
 
-  const CLUSTER_ALT = 0.8; // above this → cluster view; below → individual dots
-  const CZ          = 0.8; // same threshold: precision legend shows when < CZ
+  // ── Canvas setup ──────────────────────────────────────────────────────────
+  const container = document.getElementById('globe');
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;cursor:grab';
+  container.style.position = 'relative';
+  container.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
 
-  // ── Performance: no textures — build both surfaces from tiny canvases ──────
-  function solidCanvas(color) {
-    const c = Object.assign(document.createElement('canvas'), {width:2,height:2});
-    c.getContext('2d').fillStyle = color;
-    c.getContext('2d').fillRect(0,0,2,2);
-    return c.toDataURL();
+  let W, H, cx, cy, radius, minScale, maxScale;
+  const CLUSTER_ZOOM = 5;   // scale/minScale ratio — above this: individual dots
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const r = container.getBoundingClientRect();
+    W = r.width * dpr; H = r.height * dpr;
+    canvas.width = W; canvas.height = H;
+    canvas.style.width = r.width + 'px'; canvas.style.height = r.height + 'px';
+    cx = W / 2; cy = H / 2;
+    radius = Math.min(cx, cy) - 20 * dpr;
+    minScale = radius;
+    maxScale = minScale * 3000;          // deep zoom: separates individual DCs
+    scale = Math.max(minScale, Math.min(maxScale, scale || minScale));
+    proj.translate([cx, cy]).scale(scale);
+    dirty = true;
   }
-  function starfield() {
-    const c = Object.assign(document.createElement('canvas'), {width:1024,height:512});
-    const ctx = c.getContext('2d');
-    ctx.fillStyle='#05080f'; ctx.fillRect(0,0,1024,512);
-    for (let i=0;i<700;i++) {
-      ctx.globalAlpha = Math.random()*.75+.25;
-      ctx.fillStyle   = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(Math.random()*1024, Math.random()*512, Math.random()*.9+.1, 0, Math.PI*2);
-      ctx.fill();
-    }
-    return c.toDataURL();
-  }
+  window.addEventListener('resize', resize);
 
-  // ── Globe ─────────────────────────────────────────────────────────────────
-  const world = Globe({ rendererConfig:{antialias:true,alpha:false}, animateIn:false })
-    .globeImageUrl(solidCanvas('#0d1e35'))   // solid dark navy — no satellite
-    .backgroundImageUrl(starfield())         // canvas stars — no real photo
-    .showAtmosphere(true)
-    .atmosphereColor('#1e7abf')
-    .atmosphereAltitude(0.18)
-    .pointAltitude(0.008)
-    .pointRadius(0.22)
-    .pointColor(d => ({address:'#00ff88',city:'#fbbf24',country:'#f87171'}[d.tier]||'#f87171'))
-    .pointLabel('')
-    .onPointClick(onPointClick)
-    .onPointHover(onPointHover)
-    (document.getElementById('globe'));
+  // ── D3 projection ─────────────────────────────────────────────────────────
+  const proj     = d3.geoOrthographic().clipAngle(90).rotate([0, -20, 0]);
+  const geoPath  = d3.geoPath(proj, ctx);
+  const graticule = d3.geoGraticule().step([15, 15]);
+  let scale = 0, rotate = [0, -20, 0];
 
-  world.controls().enableDamping   = true;
-  world.controls().dampingFactor   = 0.08;
-  world.controls().autoRotate      = true;
-  world.controls().autoRotateSpeed = 0.35;
-  world.controls().minDistance     = 120;
-  world.controls().maxDistance     = 800;
-  world.pointOfView({lat:20,lng:10,altitude:2.2}, 0);
-
-  // ── Rotate pause/resume ───────────────────────────────────────────────────
-  let rotTimer;
-  const pauseRotate  = () => { world.controls().autoRotate=false; clearTimeout(rotTimer); };
-  const resumeRotate = () => { rotTimer=setTimeout(()=>{world.controls().autoRotate=true;},4000); };
-  const globeEl = document.getElementById('globe');
-  globeEl.addEventListener('pointerdown', pauseRotate);
-  globeEl.addEventListener('pointerup',   resumeRotate);
-  globeEl.addEventListener('wheel',       pauseRotate);
+  // ── State ─────────────────────────────────────────────────────────────────
+  let dirty = true, autoRotate = true, rotTimer;
+  let isDragging = false, dragStart = null, rotateStart = null;
+  let borders = null, land = null;     // topojson geometry
+  let allPoints = [], currentFiltered = [], currentClusters = [];
+  let countryLabelData = [];
+  let countries = new Set(), countryCounts = {};
+  let activeCountry = '', activeSearch = '';
+  let flyAnim = null;
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function parseSqft(v){if(!v)return null;const m=String(v).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/);return m?+m[1]:null}
   function parseMW(v)  {if(!v)return null;const m=String(v).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/);return m?+m[1]:null}
   function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-  function fmtCount(n){return n>=1000?Math.round(n/100)/10+'k':String(n);}
+  function fmtN(n){return n>=1000?Math.round(n/100)/10+'k':String(n);}
+  const dpr = () => window.devicePixelRatio || 1;
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+    const sf = scale / minScale;
+
+    // Atmosphere glow
+    const ag = ctx.createRadialGradient(cx, cy, radius * 0.92, cx, cy, radius * 1.18);
+    ag.addColorStop(0, 'rgba(30,122,195,0.32)'); ag.addColorStop(1, 'rgba(10,40,80,0)');
+    ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(cx, cy, radius * 1.18, 0, Math.PI*2); ctx.fill();
+
+    // Globe disc
+    ctx.beginPath(); geoPath({type:'Sphere'}); ctx.fillStyle = '#0d1e35'; ctx.fill();
+
+    // Graticule
+    ctx.beginPath(); geoPath(graticule());
+    ctx.strokeStyle = 'rgba(80,120,150,0.07)'; ctx.lineWidth = 0.4 * dpr(); ctx.stroke();
+
+    // Country borders (one draw call — very fast)
+    if (borders) {
+      ctx.beginPath(); geoPath(borders);
+      ctx.strokeStyle = 'rgba(85,118,148,0.55)'; ctx.lineWidth = 0.7 * dpr(); ctx.stroke();
+    }
+
+    // Data center dots / clusters
+    drawDots(sf);
+
+    // Labels (skip during fast drag at globe zoom for perf)
+    if (!isDragging || sf > 2) drawLabels(sf);
+
+    // Sphere edge
+    ctx.beginPath(); geoPath({type:'Sphere'});
+    ctx.strokeStyle = 'rgba(30,100,180,0.4)'; ctx.lineWidth = 1.2 * dpr(); ctx.stroke();
+  }
+
+  function drawDots(sf) {
+    const isCluster = sf < CLUSTER_ZOOM;
+    const d = dpr();
+
+    if (isCluster) {
+      // One circle per country, sized by sqrt(count)
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      currentClusters.forEach(c => {
+        const p = proj([c.lng, c.lat]); if (!p) return;
+        const [x, y] = p;
+        if (x < -80 || x > W + 80 || y < -80 || y > H + 80) return;
+        const r = Math.max(8 * d, Math.min(32 * d, Math.sqrt(c.count) * 1.6 * d));
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,183,67,0.72)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(255,215,130,0.55)'; ctx.lineWidth = 1.5 * d; ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.max(9, Math.min(14, r * 0.75))}px "IBM Plex Mono",monospace`;
+        ctx.fillText(fmtN(c.count), x, y);
+      });
+      ctx.textAlign = 'left';
+    } else {
+      // Individual DCs
+      const dotR = Math.max(2 * d, Math.min(5 * d, sf * 0.4 * d));
+      ctx.globalAlpha = 0.88;
+      currentFiltered.forEach(dc => {
+        const p = proj([dc.lng, dc.lat]); if (!p) return;
+        const [x, y] = p;
+        if (x < -dotR || x > W + dotR || y < -dotR || y > H + dotR) return;
+        ctx.beginPath(); ctx.arc(x, y, dotR, 0, Math.PI*2);
+        ctx.fillStyle = {address:'#00ff88',city:'#fbbf24',country:'#f87171'}[dc.tier] || '#f87171';
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawLabels(sf) {
+    const d = dpr();
+    ctx.textBaseline = 'alphabetic';
+
+    // Country names — only when not deeply zoomed in
+    if (sf < 12 && countryLabelData.length) {
+      const fs = Math.round(11 * d);
+      ctx.font = `${fs}px "IBM Plex Sans",sans-serif`;
+      ctx.fillStyle = 'rgba(190,208,228,0.80)';
+      ctx.textAlign = 'center';
+      countryLabelData.forEach(c => {
+        const p = proj([c.lng, c.lat]); if (!p) return;
+        ctx.fillText(c.name, p[0], p[1]);
+      });
+    }
+
+    // City names — appear as you zoom in
+    if (sf > 1.8 && CL1.length) {
+      const fs = Math.round(10 * d);
+      ctx.font = `${fs}px "IBM Plex Sans",sans-serif`;
+      ctx.fillStyle = 'rgba(158,178,205,0.72)';
+      ctx.textAlign = 'center';
+      const cities = sf > 5 ? [...CL1, ...CL2] : CL1;
+      cities.forEach(([name, lat, lng]) => {
+        const p = proj([lng, lat]); if (!p) return;
+        ctx.fillText(name, p[0], p[1]);
+      });
+    }
+    ctx.textAlign = 'left';
+  }
+
+  // ── Render loop ───────────────────────────────────────────────────────────
+  function frame() {
+    if (autoRotate && !isDragging && !flyAnim) {
+      rotate[0] -= 0.09;
+      proj.rotate(rotate);
+      dirty = true;
+    }
+    if (dirty) { render(); dirty = false; }
+    requestAnimationFrame(frame);
+  }
+
+  // ── Fly-to animation ──────────────────────────────────────────────────────
+  function flyTo(lng, lat, targetScale, ms = 1200) {
+    if (flyAnim) cancelAnimationFrame(flyAnim);
+    autoRotate = false;
+    const r0 = [...rotate], s0 = scale;
+    const rTarget = [-lng, -lat, 0];
+    const tgt = Math.max(minScale, Math.min(maxScale, targetScale));
+    const t0 = performance.now();
+    function step(t) {
+      let k = Math.min(1, (t - t0) / ms);
+      k = k < 0.5 ? 2*k*k : -1+(4-2*k)*k;
+      // Interpolate rotation (handle wrap-around for longitude)
+      let dLng = ((rTarget[0] - r0[0]) % 360 + 540) % 360 - 180;
+      rotate[0] = r0[0] + dLng * k;
+      rotate[1] = r0[1] + (rTarget[1] - r0[1]) * k;
+      rotate[2] = 0;
+      scale = s0 + (tgt - s0) * k;
+      proj.rotate(rotate).scale(scale);
+      dirty = true;
+      if (k < 1) flyAnim = requestAnimationFrame(step);
+      else { flyAnim = null; resumeRotate(); }
+    }
+    flyAnim = requestAnimationFrame(step);
+  }
+
+  function stopRotate()  { autoRotate = false; clearTimeout(rotTimer); }
+  function resumeRotate(){ rotTimer = setTimeout(() => autoRotate = true, 4000); }
+
+  // ── Mouse / touch interaction ─────────────────────────────────────────────
+  canvas.addEventListener('mousedown', e => {
+    isDragging = true; dragStart = [e.clientX, e.clientY]; rotateStart = [...rotate];
+    stopRotate(); canvas.style.cursor = 'grabbing';
+  });
+  canvas.addEventListener('mousemove', e => {
+    if (isDragging) {
+      const sens = (minScale / scale) * 0.28 * dpr();
+      rotate[0] = rotateStart[0] + (e.clientX - dragStart[0]) * sens;
+      rotate[1] = Math.max(-88, Math.min(88, rotateStart[1] - (e.clientY - dragStart[1]) * sens));
+      proj.rotate(rotate); dirty = true;
+    } else {
+      handleHover(e.clientX, e.clientY);
+    }
+  });
+  canvas.addEventListener('mouseup', () => {
+    isDragging = false; canvas.style.cursor = 'grab'; resumeRotate();
+  });
+  canvas.addEventListener('mouseleave', () => {
+    isDragging = false; canvas.style.cursor = 'grab';
+    document.getElementById('tooltip').style.display = 'none';
+  });
+  canvas.addEventListener('click', e => { if (!isDragging) handleClick(e); });
+
+  // Scroll to zoom
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    stopRotate();
+    const factor = e.deltaY < 0 ? 1.18 : 1/1.18;
+    scale = Math.max(minScale, Math.min(maxScale, scale * factor));
+    proj.scale(scale); dirty = true;
+    updateLegend();
+    resumeRotate();
+  }, { passive: false });
+
+  // Touch: drag + pinch
+  let touches = {}, pinchDist0 = 0, pinchScale0 = 0, touchRotate0 = [];
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault(); stopRotate();
+    if (e.touches.length === 1) {
+      dragStart = [e.touches[0].clientX, e.touches[0].clientY]; rotateStart = [...rotate];
+    } else if (e.touches.length === 2) {
+      pinchDist0 = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      pinchScale0 = scale; rotateStart = [...rotate];
+      dragStart = [(e.touches[0].clientX+e.touches[1].clientX)/2, (e.touches[0].clientY+e.touches[1].clientY)/2];
+    }
+  }, {passive:false});
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      const sens = (minScale / scale) * 0.28 * dpr();
+      rotate[0] = rotateStart[0] + (e.touches[0].clientX - dragStart[0]) * sens;
+      rotate[1] = Math.max(-88, Math.min(88, rotateStart[1] - (e.touches[0].clientY - dragStart[1]) * sens));
+      proj.rotate(rotate); dirty = true;
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      scale = Math.max(minScale, Math.min(maxScale, pinchScale0 * dist / pinchDist0));
+      proj.scale(scale); dirty = true; updateLegend();
+    }
+  }, {passive:false});
+  canvas.addEventListener('touchend', () => resumeRotate());
+
+  // ── Hover & click helpers ─────────────────────────────────────────────────
+  const ttEl = document.getElementById('tooltip');
+  const popupEl = document.getElementById('popup');
+
+  function nearestDC(mx, my, r = 8) {
+    const d = dpr();
+    let best = null, bestD = r * d;
+    currentFiltered.forEach(dc => {
+      const p = proj([dc.lng, dc.lat]); if (!p) return;
+      const dist = Math.hypot(p[0] - mx * d, p[1] - my * d);
+      if (dist < bestD) { bestD = dist; best = dc; }
+    });
+    return best;
+  }
+  function nearestCluster(mx, my, r = 36) {
+    const d = dpr();
+    let best = null, bestD = r * d;
+    currentClusters.forEach(c => {
+      const p = proj([c.lng, c.lat]); if (!p) return;
+      const dist = Math.hypot(p[0] - mx * d, p[1] - my * d);
+      if (dist < bestD) { bestD = dist; best = c; }
+    });
+    return best;
+  }
+
+  function handleHover(mx, my) {
+    const sf = scale / minScale;
+    if (sf < CLUSTER_ZOOM) { canvas.style.cursor = 'grab'; ttEl.style.display = 'none'; return; }
+    const dc = nearestDC(mx, my);
+    if (dc) {
+      canvas.style.cursor = 'pointer';
+      ttEl.textContent = dc.name;
+      ttEl.style.left  = (mx + 14) + 'px';
+      ttEl.style.top   = (my - 32) + 'px';
+      ttEl.style.display = 'block';
+    } else {
+      canvas.style.cursor = 'grab'; ttEl.style.display = 'none';
+    }
+  }
+
+  function handleClick(e) {
+    const sf = scale / minScale;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    if (sf < CLUSTER_ZOOM) {
+      const c = nearestCluster(mx, my);
+      if (c) flyTo(c.lng, c.lat, minScale * CLUSTER_ZOOM * 1.5);
+    } else {
+      const dc = nearestDC(mx, my);
+      if (dc) showPopup(dc, e.clientX, e.clientY);
+      else popupEl.style.display = 'none';
+    }
+  }
+
+  // ── Precision legend ──────────────────────────────────────────────────────
+  function updateLegend() {
+    const sf = scale / minScale;
+    const s = document.getElementById('precision-section');
+    const h = document.getElementById('zoom-hint');
+    s.style.opacity = sf >= CLUSTER_ZOOM ? '1' : '0.4';
+    h.style.display  = sf >= CLUSTER_ZOOM ? 'none' : 'inline';
+  }
 
   // ── Popup ─────────────────────────────────────────────────────────────────
-  const popupEl=document.getElementById('popup'), ttEl=document.getElementById('tooltip');
-
-  function buildPopup(d){
+  function buildPopup(d) {
     const SL={'total space':'Total Space','colocation space':'Colo Space','total power':'Total Power','to nearest airport':'Nearest Airport'};
     const chips=Object.entries(SL).filter(([k])=>d[k]).map(([k,l])=>`<div class="pchip">${esc(d[k])} <span style="opacity:.6">${l}</span></div>`).join('');
     const badge=`<span class="tbadge ${d.tier||'country'}">${{address:'Exact',city:'City',country:'Country'}[d.tier]||'Country'}</span>`;
@@ -251,312 +503,207 @@ window.addEventListener('load', function () {
       <div class="ph"><div class="pn">${esc(d.name)}${badge}</div><div class="pc">${esc(d.country)}</div></div>
       <div class="pb">${addr}${chips?`<div class="pchips">${chips}</div>`:''}${desc}<div class="pacts">${dcLink}</div></div>`;
   }
-  function showPopup(d,cx,cy){
-    popupEl.innerHTML=buildPopup(d); popupEl.style.display='block';
-    requestAnimationFrame(()=>{
-      const pw=popupEl.offsetWidth||340,ph=popupEl.offsetHeight||420;
-      let x=cx+18,y=cy-24;
-      if(x+pw>window.innerWidth-8)  x=cx-pw-18;
-      if(y+ph>window.innerHeight-8) y=window.innerHeight-ph-8;
-      if(y<60)y=60; if(x<8)x=8;
-      popupEl.style.left=x+'px'; popupEl.style.top=y+'px';
+  function showPopup(d, cx, cy) {
+    popupEl.innerHTML = buildPopup(d); popupEl.style.display = 'block';
+    requestAnimationFrame(() => {
+      const pw = popupEl.offsetWidth||340, ph = popupEl.offsetHeight||420;
+      let x = cx+18, y = cy-24;
+      if(x+pw > window.innerWidth-8)  x = cx-pw-18;
+      if(y+ph > window.innerHeight-8) y = window.innerHeight-ph-8;
+      if(y < 60) y = 60; if(x < 8) x = 8;
+      popupEl.style.left = x+'px'; popupEl.style.top = y+'px';
     });
   }
 
-  function onPointClick(d,ev){
-    const alt=world.pointOfView().altitude;
-    pauseRotate();
-    if(alt>CLUSTER_ALT){
-      // Cluster: fly in to expand
-      world.pointOfView({lat:d.lat,lng:d.lng,altitude:CLUSTER_ALT*0.55},800);
-    } else {
-      showPopup(d,ev.clientX,ev.clientY);
-    }
-  }
-  function onPointHover(d){
-    globeEl.style.cursor=d?'pointer':'default';
-    const alt=world.pointOfView().altitude;
-    if(d&&alt<=CLUSTER_ALT){ttEl.textContent=d.name;ttEl.style.display='block';}
-    else ttEl.style.display='none';
-  }
-  globeEl.addEventListener('mousemove',ev=>{ttEl.style.left=(ev.clientX+14)+'px';ttEl.style.top=(ev.clientY-32)+'px';});
-  globeEl.addEventListener('click',ev=>{if(ev.target.tagName==='CANVAS')popupEl.style.display='none';});
-
-  // ── City label dataset (494 cities, 3 tiers) ─────────────────────────────
+  // ── City label data ───────────────────────────────────────────────────────
 const T1=[['Tokyo',35.68,139.69],['Delhi',28.61,77.21],['Shanghai',31.22,121.46],['Sao Paulo',-23.55,-46.63],['Mexico City',19.43,-99.13],['Cairo',30.04,31.24],['Mumbai',19.08,72.88],['Beijing',39.91,116.39],['Dhaka',23.73,90.4],['Osaka',34.69,135.5],['New York',40.71,-74.01],['Karachi',24.86,67.01],['Chongqing',29.56,106.55],['Buenos Aires',-34.61,-58.37],['Istanbul',41.01,28.95],['Kolkata',22.57,88.36],['Lagos',6.45,3.47],['Kinshasa',-4.32,15.32],['Manila',14.6,120.98],['Guangzhou',23.13,113.27],['Rio de Janeiro',-22.91,-43.17],['Moscow',55.75,37.62],['Lahore',31.56,74.34],['Shenzhen',22.54,114.06],['Bangalore',12.97,77.59],['Jakarta',-6.21,106.85],['Chennai',13.08,80.27],['Lima',-12.07,-77.04],['Paris',48.86,2.35],['Bogota',4.71,-74.07],['London',51.51,-0.13],['Hyderabad',17.39,78.49],['Tehran',35.69,51.42],['Bangkok',13.75,100.52],['Seoul',37.57,126.98],['Wuhan',30.58,114.27],['Chicago',41.88,-87.63],['Johannesburg',-26.2,28.04],['Baghdad',33.34,44.4],['Santiago',-33.46,-70.65],['Toronto',43.7,-79.42],['Nairobi',-1.28,36.82],['Madrid',40.42,-3.7],['Los Angeles',34.05,-118.24],['Chengdu',30.66,104.07],['Riyadh',24.69,46.72],['Sydney',-33.87,151.21],['Singapore',1.29,103.86],['Berlin',52.52,13.4],['Ho Chi Minh City',10.82,106.63],['Luanda',-8.84,13.23],['Washington',38.91,-77.04],['Addis Ababa',9.02,38.74],['Dar es Salaam',-6.79,39.21],['Yangon',16.85,96.18],['Nanjing',32.06,118.79],['Rome',41.9,12.49],['Harbin',45.75,126.65],['Hangzhou',30.27,120.15],['Casablanca',33.59,-7.62],['Accra',5.56,-0.2],['Dubai',25.07,55.14],['Ankara',39.93,32.86],['Islamabad',33.73,73.09],['Taipei',25.05,121.53],['Khartoum',15.56,32.53],['Melbourne',-37.81,144.96],['Abidjan',5.35,-4.02],['Kyiv',50.45,30.52],['Kuala Lumpur',3.15,101.69],['Hanoi',21.03,105.85],['Shenyang',41.8,123.43],['Montreal',45.51,-73.55],['Barcelona',41.39,2.15],['Ahmedabad',23.03,72.59],['Milan',45.46,9.19],['Surat',21.17,72.83],['Pune',18.52,73.86],['Colombo',6.93,79.85],['Kabul',34.52,69.18],['Kampala',0.32,32.58],['Phnom Penh',11.57,104.92],['Minsk',53.9,27.57],['Vienna',48.21,16.37],['Warsaw',52.23,21.01],['Amman',31.95,35.93],['Doha',25.29,51.53],['Jeddah',21.54,39.17],['Cape Town',-33.93,18.42],['Auckland',-36.87,174.77],['Dakar',14.69,-17.44],['Baku',40.41,49.87],['Tbilisi',41.69,44.83],['Tashkent',41.3,69.27],['Almaty',43.25,76.95],['Kathmandu',27.72,85.32]];
 const T2=[['Guadalajara',20.67,-103.33],['Monterrey',25.68,-100.32],['Puebla',19.05,-98.21],['Vancouver',49.25,-123.12],['Calgary',51.05,-114.07],['Edmonton',53.55,-113.49],['Ottawa',45.42,-75.7],['Winnipeg',49.9,-97.14],['Houston',29.76,-95.37],['Phoenix',33.45,-112.07],['Philadelphia',39.95,-75.17],['San Antonio',29.42,-98.49],['Dallas',32.79,-96.77],['San Francisco',37.77,-122.42],['Seattle',47.61,-122.33],['Denver',39.74,-104.98],['Miami',25.77,-80.19],['Atlanta',33.75,-84.39],['Minneapolis',44.98,-93.27],['Portland',45.52,-122.68],['Tampa',27.95,-82.46],['Las Vegas',36.17,-115.14],['St. Louis',38.63,-90.2],['Pittsburgh',40.44,-79.99],['Kansas City',39.1,-94.58],['Charlotte',35.23,-80.84],['Indianapolis',39.77,-86.16],['Nashville',36.17,-86.78],['San Diego',32.72,-117.15],['Belo Horizonte',-19.93,-43.94],['Porto Alegre',-30.03,-51.23],['Curitiba',-25.43,-49.27],['Brasilia',-15.78,-47.93],['Fortaleza',-3.73,-38.52],['Manaus',-3.1,-60.02],['Salvador',-12.97,-38.5],['Recife',-8.05,-34.88],['Cordoba',-31.42,-64.18],['Rosario',-32.95,-60.65],['Mendoza',-32.89,-68.85],['Medellin',6.25,-75.57],['Cali',3.44,-76.52],['Barranquilla',10.96,-74.8],['Arequipa',-16.41,-71.54],['Concepcion',-36.82,-73.06],['Caracas',10.48,-66.9],['Quito',-0.23,-78.52],['Guayaquil',-2.17,-79.92],['Havana',23.13,-82.38],['Hamburg',53.55,10.0],['Munich',48.14,11.58],['Cologne',50.94,6.96],['Frankfurt',50.11,8.68],['Stuttgart',48.78,9.18],['Leipzig',51.34,12.37],['Dresden',51.05,13.74],['Dortmund',51.52,7.47],['Bremen',53.08,8.81],['Nuremberg',49.45,11.08],['Marseille',43.3,5.37],['Lyon',45.74,4.84],['Toulouse',43.6,1.44],['Bordeaux',44.84,-0.58],['Lille',50.63,3.07],['Nice',43.71,7.26],['Nantes',47.22,-1.55],['Birmingham',52.48,-1.89],['Manchester',53.48,-2.24],['Glasgow',55.86,-4.25],['Leeds',53.8,-1.55],['Liverpool',53.41,-2.99],['Edinburgh',55.95,-3.19],['Naples',40.85,14.27],['Turin',45.07,7.68],['Palermo',38.12,13.36],['Genoa',44.41,8.93],['Bologna',44.49,11.34],['Florence',43.77,11.26],['Valencia',39.47,-0.37],['Seville',37.39,-5.99],['Zaragoza',41.65,-0.89],['Bilbao',43.26,-2.93],['Krakow',50.06,19.95],['Lodz',51.76,19.46],['Wroclaw',51.11,17.04],['Gdansk',54.35,18.65],['Kharkiv',49.99,36.23],['Odesa',46.48,30.73],['Dnipro',48.46,34.98],['Lviv',49.84,24.03],['Budapest',47.5,19.04],['Prague',50.09,14.42],['Bratislava',48.15,17.11],['Zagreb',45.81,15.98],['Belgrade',44.8,20.46],['Sofia',42.7,23.32],['Bucharest',44.43,26.1],['Athens',37.98,23.73],['Amsterdam',52.37,4.9],['Rotterdam',51.92,4.48],['Stockholm',59.33,18.07],['Gothenburg',57.71,11.97],['Oslo',59.91,10.75],['Copenhagen',55.68,12.57],['Helsinki',60.17,24.94],['Lisbon',38.72,-9.14],['Porto',41.16,-8.63],['Brussels',50.85,4.35],['Zurich',47.38,8.54],['Geneva',46.2,6.14],['Dublin',53.33,-6.25],['Ulaanbaatar',47.91,106.88],['Pyongyang',39.03,125.75],['Busan',35.1,129.04],['Nagoya',35.18,136.91],['Sapporo',43.06,141.35],['Fukuoka',33.6,130.42],['Yokohama',35.44,139.64],['Kobe',34.69,135.2],['Kyoto',35.01,135.77],['Surabaya',-7.25,112.75],['Bandung',-6.92,107.61],['Medan',3.59,98.67],['Makassar',-5.13,119.41],['Cebu',10.31,123.89],['Davao',7.07,125.61],['Da Nang',16.07,108.22],['Hai Phong',20.86,106.68],['Faisalabad',31.42,73.09],['Rawalpindi',33.6,73.04],['Peshawar',34.01,71.57],['Chittagong',22.34,91.84],['Mashhad',36.31,59.6],['Isfahan',32.66,51.68],['Tabriz',38.07,46.3],['Shiraz',29.62,52.54],['Mosul',36.34,43.13],['Basra',30.51,47.82],['Tel Aviv',32.08,34.78],['Haifa',32.82,34.99],['Jerusalem',31.77,35.22],['Beirut',33.89,35.5],['Kuwait City',29.37,47.98],['Muscat',23.59,58.59],['Abu Dhabi',24.47,54.37],['Sharjah',25.36,55.42],['Sanaa',15.37,44.19],['Izmir',38.41,27.14],['Bursa',40.19,29.07],['Antalya',36.9,30.7],['Adana',37.0,35.32],['Gaziantep',37.07,37.38],['Kano',12.0,8.52],['Ibadan',7.39,3.9],['Abuja',9.07,7.4],['Port Harcourt',4.82,7.05],['Mombasa',-4.05,39.67],['Kigali',-1.95,30.06],['Harare',-17.83,31.05],['Lusaka',-15.42,28.28],['Maputo',-25.97,32.59],['Antananarivo',-18.91,47.54],['Bamako',12.65,-8.0],['Ouagadougou',12.37,-1.53],['Niamey',13.52,2.11],['Yaunde',3.87,11.52],['Douala',4.05,9.7],['Mogadishu',2.05,45.34],['Tripoli',32.9,13.18],['Algiers',36.74,3.06],['Tunis',36.82,10.17],['Novosibirsk',54.99,82.9],['Yekaterinburg',56.84,60.6],['Nizhny Novgorod',56.33,44.0],['Kazan',55.79,49.12],['Chelyabinsk',55.16,61.4],['Omsk',54.99,73.37],['Samara',53.2,50.15],['Rostov-on-Don',47.23,39.72],['Krasnoyarsk',56.01,92.85],['Volgograd',48.72,44.5],['Krasnodar',45.03,38.98],['Yerevan',40.18,44.51],['Bishkek',42.87,74.59],['Brisbane',-27.47,153.03],['Perth',-31.95,115.86],['Adelaide',-34.93,138.6],['Wellington',-41.29,174.78],['Christchurch',-43.53,172.64]];
 const T3=[['Jacksonville',30.33,-81.66],['Memphis',35.15,-90.05],['Baltimore',39.29,-76.61],['El Paso',31.76,-106.49],['Oklahoma City',35.47,-97.52],['Sacramento',38.58,-121.49],['Omaha',41.26,-95.94],['Raleigh',35.78,-78.64],['Milwaukee',43.04,-87.91],['Albuquerque',35.1,-106.65],['Louisville',38.25,-85.76],['Tucson',32.22,-110.97],['Fresno',36.74,-119.77],['Mesa',33.42,-111.83],['Honolulu',21.31,-157.86],['Quebec City',46.81,-71.21],['Halifax',44.65,-63.57],['Victoria (Canada)',48.43,-123.37],['Goiania',-16.69,-49.25],['Campinas',-22.91,-47.06],['Manaus',-3.1,-60.02],['Maceio',-9.67,-35.74],['Campo Grande',-20.44,-54.65],['Cuiaba',-15.6,-56.1],['Tucuman',-26.82,-65.22],['La Plata',-34.92,-57.95],['Cartagena',10.39,-75.48],['Trujillo',-8.11,-79.03],['Chiclayo',-6.77,-79.84],['Cochabamba',-17.39,-66.16],['Santa Cruz de la Sierra',-17.79,-63.18],['Asuncion',-25.29,-57.65],['Montevideo',-34.91,-56.19],['La Paz',-16.5,-68.15],['Valencia (VE)',10.16,-67.99],['Maracaibo',10.63,-71.64],['Hannover',52.37,9.74],['Augsburg',48.37,10.9],['Munster',51.96,7.63],['Duisburg',51.43,6.76],['Mannheim',49.49,8.47],['Gelsenkirchen',51.52,7.09],['Rennes',48.11,-1.68],['Grenoble',45.19,5.72],['Montpellier',43.61,3.87],['Sheffield',53.38,-1.47],['Bristol',51.45,-2.6],['Nottingham',52.95,-1.15],['Cardiff',51.48,-3.18],['Belfast',54.6,-5.93],['Newcastle (UK)',54.98,-1.62],['Catania',37.5,15.09],['Bari',41.12,16.87],['Verona',45.44,10.99],['Cagliari',39.22,9.12],['Alicante',38.35,-0.48],['Valladolid',41.65,-4.72],['Malaga',36.72,-4.42],['Las Palmas',28.12,-15.43],['Katowice',50.26,19.02],['Lublin',51.25,22.57],['Bialystok',53.13,23.17],['Vilnius',54.69,25.28],['Riga',56.95,24.11],['Tallinn',59.44,24.75],['Plovdiv',42.15,24.75],['Varna',43.22,27.91],['Timisoara',45.75,21.23],['Cluj-Napoca',46.77,23.6],['Iasi',47.16,27.59],['Brno',49.2,16.61],['Ljubljana',46.06,14.51],['Sarajevo',43.84,18.36],['Skopje',42.0,21.43],['Tirana',41.33,19.82],['Chisinau',47.01,28.86],['Thessaloniki',40.64,22.94],['Vilnius',54.69,25.28],['Ufa',54.74,55.97],['Perm',58.01,56.23],['Voronezh',51.67,39.19],['Saratov',51.54,46.01],['Izhevsk',56.85,53.22],['Barnaul',53.35,83.74],['Reykjavik',64.13,-21.82],['Luxembourg',49.61,6.13],['Bern',46.95,7.45],['Basel',47.56,7.59],['Antwerp',51.22,4.4],['Ghent',51.05,3.72],['Xi\'an',34.34,108.94],['Dongguan',23.02,113.75],['Foshan',23.03,113.13],['Jinan',36.67,117.0],['Zhengzhou',34.76,113.65],['Changsha',28.23,112.93],['Kunming',25.05,102.72],['Changchun',43.88,125.35],['Dalian',38.91,121.6],['Ningbo',29.86,121.55],['Qingdao',36.07,120.38],['Hefei',31.86,117.28],['Nanchang',28.68,115.88],['Shijiazhuang',38.05,114.48],['Guiyang',26.6,106.71],['Taiyuan',37.87,112.55],['Lanzhou',36.06,103.79],['Urumqi',43.8,87.6],['Nanning',22.82,108.32],['Xiamen',24.48,118.08],['Wenzhou',28.01,120.65],['Fuzhou',26.08,119.3],['Suzhou',31.3,120.62],['Tangshan',39.63,118.18],['Kawasaki',35.52,139.72],['Hiroshima',34.4,132.46],['Kitakyushu',33.88,130.88],['Niigata',37.92,139.04],['Hamamatsu',34.71,137.73],['Shizuoka',34.98,138.38],['Incheon',37.46,126.71],['Daegu',35.87,128.6],['Daejeon',36.35,127.38],['Gwangju',35.16,126.85],['Suwon',37.26,127.0],['Ulsan',35.54,129.31],['Semarang',-7.0,110.42],['Palembang',-2.99,104.76],['Batam',1.13,104.04],['Malang',-7.97,112.63],['Zamboanga',6.91,122.08],['Iloilo',10.7,122.56],['Chiang Mai',18.79,98.98],['Nakhon Ratchasima',14.97,102.1],['Multan',30.2,71.47],['Gujranwala',32.16,74.18],['Quetta',30.19,67.01],['Chittagong',22.34,91.84],['Khulna',22.8,89.57],['Rajshahi',24.37,88.6],['Jaipur',26.92,75.82],['Lucknow',26.85,80.95],['Kanpur',26.47,80.33],['Nagpur',21.15,79.08],['Thane',19.2,72.98],['Indore',22.72,75.86],['Visakhapatnam',17.69,83.22],['Patna',25.61,85.14],['Vadodara',22.31,73.19],['Bhopal',23.26,77.41],['Coimbatore',11.02,76.97],['Agra',27.18,78.01],['Nashik',19.99,73.79],['Varanasi',25.32,83.01],['Srinagar',34.08,74.8],['Aurangabad',19.88,75.34],['Amritsar',31.63,74.87],['Jodhpur',26.3,73.02],['Vijayawada',16.51,80.64],['Madurai',9.93,78.12],['Ranchi',23.35,85.33],['Ahvaz',31.32,48.68],['Qom',34.64,50.88],['Karaj',35.84,50.94],['Erbil',36.19,44.01],['Damascus',33.51,36.29],['Aleppo',36.2,37.16],['Homs',34.73,36.71],['Aden',12.79,45.04],['Amman',31.95,35.93],['Zarqa',32.07,36.09],['Nicosia',35.17,33.37],['Tripoli (LB)',34.43,35.85],['Constantine',36.37,6.61],['Oran',35.7,-0.63],['Sfax',34.74,10.76],['Marrakesh',31.63,-7.99],['Fez',34.05,-5.0],['Tangier',35.77,-5.8],['Kano',12.0,8.52],['Kaduna',10.52,7.44],['Benin City',6.34,5.63],['Mombasa',-4.05,39.67],['Nakuru',-0.28,36.07],['Kisumu',-0.1,34.75],['Ndola',-12.96,28.64],['Blantyre',-15.79,35.0],['Lilongwe',-13.97,33.79],['Bulawayo',-20.15,28.58],['Gaborone',-24.65,25.91],['Windhoek',-22.56,17.08],['Bujumbura',-3.39,29.36],['Juba',4.85,31.6],['Lome',6.14,1.22],['Cotonou',6.37,2.42],['Freetown',8.49,-13.23],['Monrovia',6.3,-10.8],['Conakry',9.54,-13.68],['Bissau',11.86,-15.6],['Lubumbashi',-11.66,27.48],['Mbuji-Mayi',-6.15,23.59],['Kisangani',0.52,25.19],['Gold Coast',-28.0,153.43],['Newcastle (AU)',-32.93,151.78],['Canberra',-35.28,149.13],['Hamilton (NZ)',-37.79,175.28],['Tauranga',-37.69,176.17],['Port Moresby',-9.44,147.18],['Suva',-18.14,178.44]];
+  // CL1=T1, CL2=T2 (T3 dropped for performance)
 
-
-  function mklabels(arr,tier){return arr.map(([name,lat,lng])=>({name,lat,lng,tier}));}
-  const CL1=mklabels(T1,'c1'), CL2=mklabels(T2,'c2'), CL3=mklabels(T3,'c3');
-  let countryLabels=[];
-
-  // ── Unified label builder (country names + city names + cluster counts) ───
-  function buildAllLabels(alt, mode, clusters){
-    let labels=[...countryLabels];
-    if(mode==='cluster' && clusters.length){
-      // Count numbers float above cluster dots
-      labels=labels.concat(clusters.map(d=>({
-        name:fmtCount(d.count), lat:d.lat, lng:d.lng, tier:'count'
-      })));
-    } else {
-      // City labels when in individual mode
-      if(alt<1.5) labels=labels.concat(CL1);
-      if(alt<0.5) labels=labels.concat(CL2);
-      if(alt<0.18)labels=labels.concat(CL3);
-    }
-    return labels;
-  }
-
-  function applyLabels(labels){
-    world
-      .labelsData(labels)
-      .labelText('name')
-      .labelSize(d=>({country:0.72,c1:0.50,c2:0.38,c3:0.28,count:0.48}[d.tier]||0.35))
-      .labelColor(d=>({
-        country:'rgba(200,215,230,0.82)',
-        c1:'rgba(175,190,210,0.74)',
-        c2:'rgba(150,168,190,0.65)',
-        c3:'rgba(120,140,165,0.56)',
-        count:'rgba(255,255,255,0.92)',
-      }[d.tier]||'rgba(160,180,200,0.6)'))
-      .labelAltitude(d=>d.tier==='count'?0.065:0.002)
-      .labelResolution(2)
-      .labelDotRadius(0);
-  }
-
-  function updateLegend(alt){
-    const s=document.getElementById('precision-section'), h=document.getElementById('zoom-hint');
-    s.style.opacity=alt<=CZ?'1':'0.4'; h.style.display=alt<=CZ?'none':'inline';
-  }
-
-  // ── Cluster mode helpers ──────────────────────────────────────────────────
-  function buildClusters(points){
-    const map={};
-    points.forEach(d=>{
-      if(!map[d.country])map[d.country]={lat:0,lng:0,count:0,country:d.country};
-      map[d.country].lat+=d.lat; map[d.country].lng+=d.lng; map[d.country].count++;
-    });
-    return Object.values(map).map(c=>({...c,lat:c.lat/c.count,lng:c.lng/c.count}));
-  }
-
-  function showClusters(clusters){
-    world
-      .pointsData(clusters)
-      .pointRadius(d=>Math.min(Math.sqrt(d.count)*0.12,3.5))
-      .pointColor(()=>'#ffb946')
-      .pointAltitude(0.005);
-  }
-  function showIndividual(points){
-    world
-      .pointsData(points)
-      .pointRadius(0.22)
-      .pointColor(d=>({address:'#00ff88',city:'#fbbf24',country:'#f87171'}[d.tier]||'#f87171'))
-      .pointAltitude(0.008);
-  }
-
-  // ── Country polygon borders ───────────────────────────────────────────────
-  fetch('https://cdn.jsdelivr.net/gh/datasets/geo-countries@master/data/countries.geojson')
-    .then(r=>r.json())
-    .then(gd=>{
-      world.polygonsData(gd.features)
-           .polygonCapColor(()=>'rgba(0,0,0,0)')
-           .polygonSideColor(()=>'rgba(0,0,0,0)')
-           .polygonStrokeColor(()=>'rgba(80,108,135,0.5)')
-           .polygonAltitude(()=>0.001);
-      countryLabels=gd.features.map(f=>{
-        const name=f.properties.ADMIN||f.properties.name||'';
-        if(!name||!f.geometry)return null;
-        let ring;
-        if(f.geometry.type==='Polygon') ring=f.geometry.coordinates[0];
-        else if(f.geometry.type==='MultiPolygon') ring=f.geometry.coordinates.reduce((a,b)=>a[0].length>b[0].length?a:b)[0];
-        else return null;
-        if(!ring||ring.length<3)return null;
-        const lat=ring.reduce((s,c)=>s+c[1],0)/ring.length;
-        const lng=ring.reduce((s,c)=>s+c[0],0)/ring.length;
-        return{name,lat,lng,tier:'country'};
-      }).filter(Boolean);
-      // Refresh labels now country names are available
-      const alt=world.pointOfView().altitude;
-      const mode=alt>CLUSTER_ALT?'cluster':'individual';
-      applyLabels(buildAllLabels(alt,mode,currentClusters));
+  // ── Country borders (world-atlas 110m — ~100KB, one draw call) ────────────
+  fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+    .then(r => r.json())
+    .then(topo => {
+      borders = topojson.mesh(topo, topo.objects.countries, (a,b) => a !== b);
+      land    = topojson.feature(topo, topo.objects.land);
+      dirty   = true;
     })
-    .catch(e=>console.warn('Country borders unavailable:',e));
+    .catch(() => console.warn('Country borders unavailable'));
 
-  // ── Data loading ──────────────────────────────────────────────────────────
-  let allPoints=[], currentFiltered=[], currentClusters=[];
-  let countries=new Set(), countryCounts={};
-  let lastMode='cluster';
-
+  // ── GeoJSON data centers ──────────────────────────────────────────────────
   fetch('datacenters.geojson')
-    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-    .then(geojson=>{
-      const feats=geojson.features||[], tiers={address:0,city:0,country:0};
-      allPoints=feats.map(f=>{
-        const p=f.properties,t=p.tier||'country';
-        if(t in tiers)tiers[t]++;
-        countries.add(p.country); countryCounts[p.country]=(countryCounts[p.country]||0)+1;
-        return{lat:f.geometry.coordinates[1],lng:f.geometry.coordinates[0],...p,
-               _sp:parseSqft(p['total space']),_co:parseSqft(p['colocation space']),_pw:parseMW(p['total power'])};
+    .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(geojson => {
+      const feats = geojson.features || [];
+      const tiers = {address:0,city:0,country:0};
+
+      allPoints = feats.map(f => {
+        const p = f.properties, t = p.tier||'country';
+        if (t in tiers) tiers[t]++;
+        countries.add(p.country);
+        countryCounts[p.country] = (countryCounts[p.country]||0)+1;
+        return { lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0], ...p,
+                 _sp:parseSqft(p['total space']), _co:parseSqft(p['colocation space']), _pw:parseMW(p['total power']) };
       });
-      currentFiltered=allPoints;
-      currentClusters=buildClusters(allPoints);
 
-      // Start in cluster mode
-      showClusters(currentClusters);
-      applyLabels(buildAllLabels(2.2,'cluster',currentClusters));
-      updateLegend(2.2);
+      currentFiltered = allPoints;
+      currentClusters = buildClusters(allPoints);
 
-      document.getElementById('header-count').innerHTML=
+      // Country label positions derived from DC centroids per country
+      const cmap = {};
+      allPoints.forEach(d => {
+        if (!cmap[d.country]) cmap[d.country] = {lat:0,lng:0,n:0};
+        cmap[d.country].lat += d.lat; cmap[d.country].lng += d.lng; cmap[d.country].n++;
+      });
+      countryLabelData = Object.entries(cmap).map(([name,c]) => ({name,lat:c.lat/c.n,lng:c.lng/c.n}));
+      dirty = true;
+
+      // Header
+      document.getElementById('header-count').innerHTML =
         `<span>${feats.length.toLocaleString()}</span> data centers &middot; <span>${countries.size}</span> countries`;
-      document.getElementById('cnt-address').textContent=tiers.address.toLocaleString();
-      document.getElementById('cnt-city').textContent=tiers.city.toLocaleString();
-      document.getElementById('cnt-country').textContent=tiers.country.toLocaleString();
-      const total=feats.length;
-      [['cov-space','total space'],['cov-colo','colocation space'],['cov-power','total power']].forEach(([id,key])=>{
-        const n=allPoints.filter(d=>d[key]).length,pct=Math.round(n/total*100);
-        const el=document.getElementById(id);
-        el.textContent=pct+'% of DCs';
-        el.className='cb '+(pct>=60?'hi':pct>=30?'me':'lo');
+      document.getElementById('cnt-address').textContent = tiers.address.toLocaleString();
+      document.getElementById('cnt-city').textContent    = tiers.city.toLocaleString();
+      document.getElementById('cnt-country').textContent = tiers.country.toLocaleString();
+
+      // Coverage badges
+      const total = feats.length;
+      [['cov-space','total space'],['cov-colo','colocation space'],['cov-power','total power']].forEach(([id,key]) => {
+        const n = allPoints.filter(d=>d[key]).length, pct = Math.round(n/total*100);
+        const el = document.getElementById(id);
+        el.textContent = pct+'% of DCs';
+        el.className = 'cb '+(pct>=60?'hi':pct>=30?'me':'lo');
       });
-      const sel=document.getElementById('country-select');
-      [...countries].sort((a,b)=>{const d=(countryCounts[b]||0)-(countryCounts[a]||0);return d||a.localeCompare(b);})
-        .forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c+' ('+(countryCounts[c]||0).toLocaleString()+')';sel.appendChild(o);});
+
+      // Country dropdown sorted by count
+      const sel = document.getElementById('country-select');
+      [...countries].sort((a,b) => { const d=(countryCounts[b]||0)-(countryCounts[a]||0); return d||a.localeCompare(b); })
+        .forEach(c => {
+          const o = document.createElement('option');
+          o.value = c; o.textContent = c+' ('+(countryCounts[c]||0).toLocaleString()+')';
+          sel.appendChild(o);
+        });
     })
-    .catch(err=>{document.getElementById('header-count').textContent='Could not load datacenters.geojson';console.error(err);});
+    .catch(err => {
+      document.getElementById('header-count').textContent = 'Could not load datacenters.geojson';
+      console.error(err);
+    });
 
-  // ── Camera change → switch modes + update labels ──────────────────────────
-  let labelRaf;
-  world.controls().addEventListener('change',()=>{
-    const alt=world.pointOfView().altitude;
-    const mode=alt>CLUSTER_ALT?'cluster':'individual';
-
-    if(mode!==lastMode){
-      lastMode=mode;
-      if(mode==='cluster'){
-        showClusters(currentClusters);
-      } else {
-        showIndividual(currentFiltered);
-      }
-      updateLegend(alt);
-    }
-
-    // Throttle label updates
-    cancelAnimationFrame(labelRaf);
-    labelRaf=requestAnimationFrame(()=>applyLabels(buildAllLabels(alt,mode,currentClusters)));
-  });
+  // ── Cluster builder ───────────────────────────────────────────────────────
+  function buildClusters(pts) {
+    const m = {};
+    pts.forEach(d => {
+      if (!m[d.country]) m[d.country] = {lat:0,lng:0,count:0,country:d.country};
+      m[d.country].lat += d.lat; m[d.country].lng += d.lng; m[d.country].count++;
+    });
+    return Object.values(m).map(c => ({...c, lat:c.lat/c.count, lng:c.lng/c.count}));
+  }
 
   // ── Search ────────────────────────────────────────────────────────────────
-  const searchEl=document.getElementById('search'), clearBtn=document.getElementById('clear-btn');
-  const dd=document.getElementById('search-dropdown');
+  const searchEl = document.getElementById('search'), clearBtn = document.getElementById('clear-btn');
+  const dd = document.getElementById('search-dropdown');
   let searchTimer;
-  const closeDD=()=>dd.style.display='none';
-  const openDD=()=>dd.style.display='block';
+  const closeDD = () => dd.style.display = 'none';
+  const openDD  = () => dd.style.display = 'block';
 
-  searchEl.addEventListener('input',()=>{
+  searchEl.addEventListener('input', () => {
     clearTimeout(searchTimer);
-    const q=searchEl.value.trim();
-    clearBtn.style.display=q?'block':'none';
-    if(!q){closeDD();applyFilters();return;}
-    searchTimer=setTimeout(()=>buildDD(q),200);
+    const q = searchEl.value.trim();
+    clearBtn.style.display = q ? 'block' : 'none';
+    if (!q) { closeDD(); applyFilters(); return; }
+    searchTimer = setTimeout(() => buildDD(q), 200);
   });
-  searchEl.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDD();searchEl.blur();}});
-  document.addEventListener('click',e=>{if(!document.getElementById('search-container').contains(e.target))closeDD();});
+  searchEl.addEventListener('keydown', e => { if(e.key==='Escape'){closeDD();searchEl.blur();} });
+  document.addEventListener('click', e => { if(!document.getElementById('search-container').contains(e.target)) closeDD(); });
 
-  function buildDD(q){
-    const ql=q.toLowerCase(),parts=[];
-    const cm=[...countries].filter(c=>c.toLowerCase().includes(ql)).sort((a,b)=>(countryCounts[b]||0)-(countryCounts[a]||0)).slice(0,5);
-    if(cm.length){
+  function buildDD(q) {
+    const ql = q.toLowerCase(), parts = [];
+    const cm = [...countries].filter(c=>c.toLowerCase().includes(ql))
+      .sort((a,b)=>(countryCounts[b]||0)-(countryCounts[a]||0)).slice(0,5);
+    if (cm.length) {
       parts.push('<div class="sd-lbl">Countries</div>');
-      cm.forEach(c=>parts.push(`<div class="sd-item" data-type="country" data-val="${esc(c)}"><span class="sd-name">${esc(c)}</span><span class="sd-meta">${(countryCounts[c]||0).toLocaleString()} DCs</span></div>`));
+      cm.forEach(c => parts.push(`<div class="sd-item" data-type="country" data-val="${esc(c)}"><span class="sd-name">${esc(c)}</span><span class="sd-meta">${(countryCounts[c]||0).toLocaleString()} DCs</span></div>`));
     }
-    const dm=allPoints.filter(d=>d.name.toLowerCase().includes(ql)||(d.address||'').toLowerCase().includes(ql)).slice(0,5);
-    if(dm.length){
-      if(parts.length)parts.push('<div class="sd-div"></div>');
+    const dm = allPoints.filter(d=>d.name.toLowerCase().includes(ql)||(d.address||'').toLowerCase().includes(ql)).slice(0,5);
+    if (dm.length) {
+      if (parts.length) parts.push('<div class="sd-div"></div>');
       parts.push('<div class="sd-lbl">Data Centers</div>');
-      dm.forEach(d=>parts.push(`<div class="sd-item" data-type="dc" data-idx="${allPoints.indexOf(d)}"><span class="sd-name">${esc(d.name)}</span><span class="sd-meta">${esc(d.country)}</span></div>`));
+      dm.forEach(d => parts.push(`<div class="sd-item" data-type="dc" data-idx="${allPoints.indexOf(d)}"><span class="sd-name">${esc(d.name)}</span><span class="sd-meta">${esc(d.country)}</span></div>`));
     }
-    if(!cm.length&&!dm.length)parts.push('<div class="sd-none">No matching countries or data centers</div>');
+    if (!cm.length && !dm.length) parts.push('<div class="sd-none">No matching countries or data centers</div>');
     parts.push(`<div class="sd-div"></div><div class="sd-place" id="sd-place"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Search "<strong>${esc(q)}</strong>" as a place</div>`);
-    dd.innerHTML=parts.join('');
-    openDD();
-    dd.querySelectorAll('.sd-item[data-type="country"]').forEach(el=>el.addEventListener('click',()=>{
-      closeDD();searchEl.value=el.dataset.val;clearBtn.style.display='block';flyToCountry(el.dataset.val);
+    dd.innerHTML = parts.join(''); openDD();
+    dd.querySelectorAll('.sd-item[data-type="country"]').forEach(el => el.addEventListener('click', () => {
+      closeDD(); searchEl.value = el.dataset.val; clearBtn.style.display = 'block'; flyToCountry(el.dataset.val);
     }));
-    dd.querySelectorAll('.sd-item[data-type="dc"]').forEach(el=>el.addEventListener('click',()=>{
-      const d=allPoints[+el.dataset.idx];if(!d)return;
-      closeDD();searchEl.value='';clearBtn.style.display='none';pauseRotate();
-      world.pointOfView({lat:d.lat,lng:d.lng,altitude:0.08},1400);
-      setTimeout(()=>showPopup(d,window.innerWidth/2,window.innerHeight/2+60),900);
+    dd.querySelectorAll('.sd-item[data-type="dc"]').forEach(el => el.addEventListener('click', () => {
+      const d = allPoints[+el.dataset.idx]; if (!d) return;
+      closeDD(); searchEl.value=''; clearBtn.style.display='none';
+      flyTo(d.lng, d.lat, minScale * 300, 1400);
+      setTimeout(() => showPopup(d, window.innerWidth/2, window.innerHeight/2+60), 1000);
     }));
-    const pb=document.getElementById('sd-place');
-    if(pb)pb.addEventListener('click',()=>nominatimFly(q));
+    const pb = document.getElementById('sd-place');
+    if (pb) pb.addEventListener('click', () => nominatimFly(q));
   }
 
-  function flyToCountry(country){
-    document.getElementById('country-select').value=country;
-    activeCountry=country; applyFilters();
-    const pts=allPoints.filter(d=>d.country===country);
-    if(!pts.length)return;
-    const lats=pts.map(d=>d.lat),lngs=pts.map(d=>d.lng);
-    const clat=(Math.min(...lats)+Math.max(...lats))/2, clng=(Math.min(...lngs)+Math.max(...lngs))/2;
-    const span=Math.max(Math.max(...lats)-Math.min(...lats),Math.max(...lngs)-Math.min(...lngs));
-    const alt=span>60?2.0:span>30?1.2:span>10?0.7:span>3?0.35:0.18;
-    world.pointOfView({lat:clat,lng:clng,altitude:alt},1200);
+  function flyToCountry(country) {
+    document.getElementById('country-select').value = country;
+    activeCountry = country; applyFilters();
+    const pts = allPoints.filter(d=>d.country===country);
+    if (!pts.length) return;
+    const lats = pts.map(d=>d.lat), lngs = pts.map(d=>d.lng);
+    const clat = (Math.min(...lats)+Math.max(...lats))/2, clng = (Math.min(...lngs)+Math.max(...lngs))/2;
+    const span = Math.max(Math.max(...lats)-Math.min(...lats), Math.max(...lngs)-Math.min(...lngs));
+    const tgtScale = minScale * (span>60?1.8:span>30?3:span>10?7:span>3?18:50);
+    flyTo(clng, clat, tgtScale);
   }
 
-  function nominatimFly(q){
+  function nominatimFly(q) {
     closeDD();
     fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q)+'&format=json&limit=1')
       .then(r=>r.json())
-      .then(res=>{
-        if(!res.length){alert('No place found for "'+q+'"');return;}
-        const r=res[0],bb=r.boundingbox.map(parseFloat);
-        const span=Math.max(bb[1]-bb[0],bb[3]-bb[2]);
-        const alt=span>60?2.2:span>20?1.4:span>5?0.7:span>1?0.3:span>0.1?0.1:0.04;
-        world.pointOfView({lat:(bb[0]+bb[1])/2,lng:(bb[2]+bb[3])/2,altitude:alt},1400);
+      .then(res => {
+        if (!res.length) { alert('No place found for "'+q+'"'); return; }
+        const bb = res[0].boundingbox.map(parseFloat);
+        const lat=(bb[0]+bb[1])/2, lng=(bb[2]+bb[3])/2;
+        const span = Math.max(bb[1]-bb[0],bb[3]-bb[2]);
+        const tgtScale = minScale*(span>60?1.8:span>20?3:span>5?8:span>1?30:span>0.1?120:400);
+        flyTo(lng, lat, tgtScale);
       })
-      .catch(()=>alert('Place search failed.'));
+      .catch(() => alert('Place search failed.'));
   }
 
   // ── Filter ────────────────────────────────────────────────────────────────
-  let activeCountry='', activeSearch='';
-  function getSpec(){
-    const n=v=>v===''?null:+v;
-    return{sp:{min:n(document.getElementById('space-min').value),max:n(document.getElementById('space-max').value),req:document.getElementById('space-req').checked},
-           co:{min:n(document.getElementById('colo-min').value), max:n(document.getElementById('colo-max').value), req:document.getElementById('colo-req').checked},
-           pw:{min:n(document.getElementById('power-min').value),max:n(document.getElementById('power-max').value),req:document.getElementById('power-req').checked}};
+  function getSpec() {
+    const n = v => v===''?null:+v;
+    return {
+      sp:{min:n(document.getElementById('space-min').value),max:n(document.getElementById('space-max').value),req:document.getElementById('space-req').checked},
+      co:{min:n(document.getElementById('colo-min').value), max:n(document.getElementById('colo-max').value), req:document.getElementById('colo-req').checked},
+      pw:{min:n(document.getElementById('power-min').value),max:n(document.getElementById('power-max').value),req:document.getElementById('power-req').checked},
+    };
   }
   function okSpec(val,f){
-    if(f.req&&val===null)return false;if(val===null)return true;
-    if(f.min!==null&&val<f.min)return false;if(f.max!==null&&val>f.max)return false;
-    return true;
+    if(f.req&&val===null)return false; if(val===null)return true;
+    if(f.min!==null&&val<f.min)return false; if(f.max!==null&&val>f.max)return false; return true;
   }
-  function applyFilters(){
-    const q=activeSearch.toLowerCase().trim(),s=getSpec();
-    const m=allPoints.filter(d=>{
+  function applyFilters() {
+    const q = activeSearch.toLowerCase().trim(), s = getSpec();
+    const m = allPoints.filter(d => {
       if(activeCountry&&d.country!==activeCountry)return false;
       if(q&&![(d.name||''),(d.country||''),(d.address||'')].some(t=>t.toLowerCase().includes(q)))return false;
       return okSpec(d._sp,s.sp)&&okSpec(d._co,s.co)&&okSpec(d._pw,s.pw);
     });
-    currentFiltered=m;
-    currentClusters=buildClusters(m);
-    const alt=world.pointOfView().altitude;
-    const mode=alt>CLUSTER_ALT?'cluster':'individual';
-    lastMode=mode;
-    if(mode==='cluster') showClusters(currentClusters); else showIndividual(currentFiltered);
-    applyLabels(buildAllLabels(alt,mode,currentClusters));
-    popupEl.style.display='none';
-    const hasF=q||activeCountry||Object.values(s).some(f=>f.min!==null||f.max!==null||f.req);
-    const info=document.getElementById('result-info');
+    currentFiltered = m; currentClusters = buildClusters(m); dirty = true; popupEl.style.display = 'none';
+    const hasF = q||activeCountry||Object.values(s).some(f=>f.min!==null||f.max!==null||f.req);
+    const info = document.getElementById('result-info');
     if(hasF){info.style.display='block';info.textContent=m.length.toLocaleString()+' results';}
     else info.style.display='none';
   }
 
+  // ── Panel wiring ──────────────────────────────────────────────────────────
   clearBtn.addEventListener('click',()=>{searchEl.value='';activeSearch='';clearBtn.style.display='none';closeDD();applyFilters();});
   document.getElementById('country-select').addEventListener('change',e=>{
-    if(e.target.value)flyToCountry(e.target.value);else{activeCountry='';applyFilters();}
+    if(e.target.value)flyToCountry(e.target.value); else{activeCountry='';applyFilters();}
   });
   document.getElementById('spec-toggle').addEventListener('click',function(){this.classList.toggle('open');document.getElementById('spec-panel').classList.toggle('open');});
   ['space-min','space-max','colo-min','colo-max','power-min','power-max'].forEach(id=>document.getElementById(id).addEventListener('input',applyFilters));
@@ -567,12 +714,15 @@ const T3=[['Jacksonville',30.33,-81.66],['Memphis',35.15,-90.05],['Baltimore',39
     document.getElementById('result-info').style.display='none';
     ['space-min','space-max','colo-min','colo-max','power-min','power-max'].forEach(id=>document.getElementById(id).value='');
     ['space-req','colo-req','power-req'].forEach(id=>document.getElementById(id).checked=false);
-    currentFiltered=allPoints; currentClusters=buildClusters(allPoints); lastMode='cluster';
-    showClusters(currentClusters);
-    applyLabels(buildAllLabels(2.2,'cluster',currentClusters));
+    currentFiltered=allPoints;currentClusters=buildClusters(allPoints);dirty=true;
     popupEl.style.display='none';
-    world.pointOfView({lat:20,lng:10,altitude:2.2},1200);
+    flyTo(0, 0, minScale, 1000);
   });
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+  resize();
+  updateLegend();
+  requestAnimationFrame(frame);
 
 }); // end load
 </script>
