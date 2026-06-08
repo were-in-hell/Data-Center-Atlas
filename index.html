@@ -4,8 +4,9 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Global Data Center Atlas</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
 <style>
@@ -185,8 +186,8 @@ select option{background:#0b0f1a}
 <div id="popup"></div>
 <div id="tooltip"></div>
 
-<script src="https://unpkg.com/leaflet@1.9/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.5/dist/leaflet.markercluster.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
 <script>
 window.addEventListener('load', function () {
 
@@ -199,11 +200,29 @@ window.addEventListener('load', function () {
     zoomControl: false,
   });
   L.control.zoom({ position: 'bottomright' }).addTo(map);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_matter_all/{z}/{x}/{y}{r}.png', {
+  // Primary: CARTO dark matter (no retina suffix to keep URL simple)
+  const tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_matter_all/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     subdomains: 'abcd',
-    maxZoom: 20,
+    maxZoom: 19,
+    crossOrigin: true,
   }).addTo(map);
+
+  // Fallback: OSM with CSS dark filter if CARTO fails
+  let usedFallback = false;
+  tileLayer.on('tileerror', () => {
+    if (usedFallback) return;
+    usedFallback = true;
+    map.removeLayer(tileLayer);
+    const style = document.createElement('style');
+    style.textContent = '.osm-dark img{filter:invert(100%) hue-rotate(180deg) brightness(.75) contrast(.9) saturate(.6)}';
+    document.head.appendChild(style);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+      className: 'osm-dark',
+    }).addTo(map);
+  });
 
   // ── Cluster group ─────────────────────────────────────────────────────────
   const clusterGroup = L.markerClusterGroup({
