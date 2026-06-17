@@ -126,6 +126,26 @@ select option{background:#0b0f1a}
 .tbadge.address{background:rgba(0,255,136,.12);color:var(--green)}
 .tbadge.city{background:rgba(251,191,36,.12);color:var(--amber)}
 .tbadge.country{background:rgba(248,113,113,.12);color:var(--red)}
+.status-badge{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;border-radius:3px;padding:2px 6px;text-transform:uppercase;font-weight:700}
+.status-badge.operational{background:rgba(0,255,136,.1);color:var(--green)}
+.status-badge.construction{background:rgba(251,191,36,.15);color:var(--amber);animation:statusPulse 2s ease-in-out infinite}
+.status-badge.announced{background:rgba(0,212,255,.1);color:var(--cyan)}
+.status-badge.planned{background:rgba(0,212,255,.08);color:var(--cyan)}
+.status-badge.decommissioned,.status-badge.closed{background:rgba(248,113,113,.1);color:var(--red)}
+.hs-badge{display:inline-flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.08em;border-radius:3px;padding:2px 7px;text-transform:uppercase;font-weight:700;background:rgba(167,139,250,.14);color:#a78bfa;border:1px solid rgba(167,139,250,.25)}
+.hs-badge .conf{opacity:.65;font-weight:400;text-transform:none;letter-spacing:0}
+@keyframes statusPulse{0%,100%{opacity:1}50%{opacity:.6}}
+.pstatus{padding:7px 14px 5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--bdr)}
+.pyear{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)}
+.pyear span{color:var(--text)}
+.pevents{padding:0 14px 8px;border-top:1px solid var(--bdr);margin-top:4px}
+.pevents-title{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:.15em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;margin-top:8px}
+.pevent{display:flex;gap:8px;font-size:10px;margin-bottom:5px;line-height:1.45}
+.pevent-date{font-family:'IBM Plex Mono',monospace;color:var(--muted);flex-shrink:0;min-width:56px}
+.pevent-stage{font-family:'IBM Plex Mono',monospace;font-size:9px;padding:1px 5px;border-radius:3px;flex-shrink:0}
+.pevent-stage.operational{background:rgba(0,255,136,.1);color:var(--green)}
+.pevent-stage.construction{background:rgba(251,191,36,.12);color:var(--amber)}
+.pevent-stage.announced{background:rgba(0,212,255,.08);color:var(--cyan)}
 
 /* ── Tooltip ── */
 #tooltip{position:fixed;z-index:1900;display:none;pointer-events:none;background:rgba(11,15,26,.95);border:1px solid var(--bdr);border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text);padding:5px 9px;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;backdrop-filter:blur(8px)}
@@ -167,6 +187,21 @@ select option{background:#0b0f1a}
   </div>
   <hr class="pdiv"/>
   <div><div class="plbl">Country</div><select id="country-select"><option value="">All countries</option></select></div>
+  <hr class="pdiv"/>
+  <div>
+    <label class="req" style="margin-top:0;font-size:12px;color:var(--text);gap:7px">
+      <input type="checkbox" id="hyperscale-only"/> Hyperscale operators only
+    </label>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px" id="hyperscale-count">&#8212;</div>
+  </div>
+  <hr class="pdiv"/>
+  <div>
+    <label class="req" style="margin-top:0;font-size:12px;color:var(--text);gap:7px">
+      <input type="checkbox" id="cables-toggle"/> Submarine cables
+    </label>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px" id="cables-count">&#8212;</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);margin-top:3px;opacity:.75">Routes shown schematically &middot; data: TeleGeography</div>
+  </div>
   <hr class="pdiv"/>
   <div>
     <button id="spec-toggle"><span class="arrow">&#9658;</span> Filter by specs</button>
@@ -246,6 +281,9 @@ window.addEventListener('load', function () {
   });
   map.addLayer(clusterGroup);
 
+  // ── Cable layer (off by default — toggled via checkbox) ────────────────────
+  const cableLayer = L.layerGroup();
+
   // ── Helpers ───────────────────────────────────────────────────────────────
   function parseSqft(v){if(!v)return null;const m=String(v).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/);return m?+m[1]:null}
   function parseMW(v)  {if(!v)return null;const m=String(v).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/);return m?+m[1]:null}
@@ -270,8 +308,45 @@ window.addEventListener('load', function () {
     const SL = {'total space':'Total Space','colocation space':'Colo Space','total power':'Total Power','to nearest airport':'Nearest Airport'};
     const chips = Object.entries(SL).filter(([k])=>d[k]).map(([k,l])=>`<div class="pchip">${esc(d[k])} <span style="opacity:.6">${l}</span></div>`).join('');
     const badge = `<span class="tbadge ${d.tier||'country'}">${{address:'Exact',city:'City',country:'Country'}[d.tier]||'Country'}</span>`;
+    const hsBadge = d.is_hyperscale
+      ? `<span class="hs-badge">&#9889; ${esc(d.hyperscale_operator||'Hyperscale')}${d.hyperscale_confidence==='verified'?' <span class="conf">verified</span>':''}</span>`
+      : '';
     const addr  = d.address ? `<div class="pr"><div class="prl">ADDR</div><div class="prv">${esc(d.address)}</div></div>` : '';
     const desc  = d.description ? `<hr class="pdivider"><div class="pdesc">${esc(d.description)}</div>` : '';
+
+    // Status badge
+    const rawStatus = d.status || 'Operational';
+    const statusKey = rawStatus.toLowerCase().replace(/[^a-z]/g,'').replace('underconstruction','construction');
+    const statusBadge = `<span class="status-badge ${statusKey}">${esc(rawStatus)}</span>`;
+
+    // Year / timeline summary
+    const yearParts = [];
+    if (d.year_opened)             yearParts.push(`<span class="pyear">Opened <span>${d.year_opened}</span></span>`);
+    if (d.year_construction_start) yearParts.push(`<span class="pyear">Construction started <span>${d.year_construction_start}</span></span>`);
+    if (d.year_announced)          yearParts.push(`<span class="pyear">Announced <span>${d.year_announced}</span></span>`);
+    const statusRow = (rawStatus !== 'Operational' || yearParts.length)
+      ? `<div class="pstatus">${statusBadge}${yearParts.join(' &middot; ')}</div>` : '';
+
+    // Events timeline (show up to 6 most recent)
+    let eventsHtml = '';
+    try {
+      const evts = typeof d.events === 'string' ? JSON.parse(d.events) : (d.events || []);
+      if (evts.length) {
+        const stageClass = s => {
+          const k = (s||'').toLowerCase();
+          if (k.includes('operational')) return 'operational';
+          if (k.includes('construction')) return 'construction';
+          if (k.includes('announced') || k.includes('planned')) return 'announced';
+          return '';
+        };
+        const rows = evts.slice(-6).map(e =>
+          `<div class="pevent"><div class="pevent-date">${esc(e.date||'')}</div>` +
+          `<span class="pevent-stage ${stageClass(e.stage)}">${esc(e.stage||e.type||'')}</span>` +
+          `<div style="color:var(--muted);font-size:10px">${esc((e.details||'').substring(0,120))}</div></div>`
+        ).join('');
+        eventsHtml = `<div class="pevents"><div class="pevents-title">Timeline</div>${rows}</div>`;
+      }
+    } catch(e) {}
     const exact = d.tier === 'address';
     const svUrl = exact ? `https://www.google.com/maps?q=${d.lat},${d.lng}&layer=c&cbll=${d.lat},${d.lng}` : null;
     let top = '';
@@ -293,12 +368,25 @@ window.addEventListener('load', function () {
     }
     const dcLink = d.page_url ? `<a class="plink" href="${esc(d.page_url)}" target="_blank" rel="noopener">datacenters.com <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>` : '';
     return `${top}<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
-      <div class="ph"><div class="pn">${esc(d.name)}${badge}</div><div class="pc">${esc(d.country)}</div></div>
-      <div class="pb">${addr}${chips?`<div class="pchips">${chips}</div>`:''}${desc}<div class="pacts">${dcLink}</div></div>`;
+      ${statusRow}
+      <div class="ph"><div class="pn">${esc(d.name)}${badge}${hsBadge}</div><div class="pc">${esc(d.country)}</div></div>
+      <div class="pb">${addr}${chips?`<div class="pchips">${chips}</div>`:''}${desc}${eventsHtml}<div class="pacts">${dcLink}</div></div>`;
   }
 
-  function showPopup(d, cx, cy) {
-    popupEl.innerHTML = buildPopup(d);
+  function buildCablePopup(p) {
+    const url = `https://www.submarinecablemap.com/submarine-cable/${encodeURIComponent(p.id)}`;
+    return `<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
+      <div class="ph"><div class="pn">${esc(p.name)}</div><div class="pc">Submarine cable</div></div>
+      <div class="pb"><div class="pacts"><a class="plink" href="${esc(url)}" target="_blank" rel="noopener">Cable details <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
+  }
+
+  function buildLandingPopup(p) {
+    return `<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
+      <div class="ph"><div class="pn">${esc(p.name)}</div><div class="pc">Cable landing point</div></div>`;
+  }
+
+  function showPopup(html, cx, cy) {
+    popupEl.innerHTML = html;
     popupEl.style.display = 'block';
     requestAnimationFrame(() => {
       const pw = popupEl.offsetWidth||340, ph = popupEl.offsetHeight||420;
@@ -314,7 +402,7 @@ window.addEventListener('load', function () {
   // ── Data ──────────────────────────────────────────────────────────────────
   let allPoints = [], allMarkers = [];
   let countries = new Set(), countryCounts = {};
-  let activeCountry = '', activeSearch = '';
+  let activeCountry = '', activeSearch = '', hyperscaleOnly = false;
 
   fetch('datacenters.geojson')
     .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -344,7 +432,7 @@ window.addEventListener('load', function () {
         });
         m.on('click', e => {
           L.DomEvent.stopPropagation(e);
-          showPopup(d, e.originalEvent.clientX, e.originalEvent.clientY);
+          showPopup(buildPopup(d), e.originalEvent.clientX, e.originalEvent.clientY);
         });
         m.on('mouseover', e => {
           ttEl.textContent   = d.name;
@@ -369,6 +457,13 @@ window.addEventListener('load', function () {
       document.getElementById('cnt-city').textContent    = tiers.city.toLocaleString();
       document.getElementById('cnt-country').textContent = tiers.country.toLocaleString();
 
+      // Hyperscale summary
+      const hsCount = allPoints.filter(d => d.is_hyperscale).length;
+      const hsEl = document.getElementById('hyperscale-count');
+      hsEl.textContent = hsCount
+        ? `${hsCount.toLocaleString()} identified (industry est. 1,360+ worldwide, Synergy Research Q4 2025)`
+        : 'No hyperscale data yet — run tag_hyperscale.py';
+
       // Coverage badges
       const total = feats.length;
       [['cov-space','total space'],['cov-colo','colocation space'],['cov-power','total power']].forEach(([id,key]) => {
@@ -392,6 +487,74 @@ window.addEventListener('load', function () {
       console.error(err);
     });
 
+  // ── Submarine cables (separate overlay, loaded in parallel, off by default) ─
+  let cablesLoaded = false, cableCount = 0, landingCount = 0;
+
+  function loadCables() {
+    if (cablesLoaded) return;
+    cablesLoaded = true;
+    Promise.all([
+      fetch('cable-geo.json').then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); }),
+      fetch('landing-point-geo.json').then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); }),
+    ]).then(([cableGeo, landingGeo]) => {
+      cableGeo.features.forEach(f => {
+        const p = f.properties;
+        const latlngs = f.geometry.coordinates.map(line => line.map(([lng, lat]) => [lat, lng]));
+        const baseStyle = { color: p.color || '#939597', weight: 1.6, opacity: 0.7 };
+        const line = L.polyline(latlngs, baseStyle);
+        line.on('click', e => {
+          L.DomEvent.stopPropagation(e);
+          showPopup(buildCablePopup(p), e.originalEvent.clientX, e.originalEvent.clientY);
+        });
+        line.on('mouseover', () => line.setStyle({ weight: 3.2, opacity: 1 }));
+        line.on('mouseout',  () => line.setStyle(baseStyle));
+        cableLayer.addLayer(line);
+      });
+      cableCount = cableGeo.features.length;
+
+      landingGeo.features.forEach(f => {
+        const p = f.properties;
+        const [lng, lat] = f.geometry.coordinates;
+        const m = L.circleMarker([lat, lng], {
+          radius: 3, weight: 1, color: 'rgba(255,255,255,0.55)',
+          fillColor: '#00d4ff', fillOpacity: 0.9,
+        });
+        m.on('click', e => {
+          L.DomEvent.stopPropagation(e);
+          showPopup(buildLandingPopup(p), e.originalEvent.clientX, e.originalEvent.clientY);
+        });
+        m.on('mouseover', e => {
+          ttEl.textContent   = p.name;
+          ttEl.style.left    = (e.originalEvent.clientX + 14) + 'px';
+          ttEl.style.top     = (e.originalEvent.clientY - 32) + 'px';
+          ttEl.style.display = 'block';
+        });
+        m.on('mousemove', e => {
+          ttEl.style.left = (e.originalEvent.clientX + 14) + 'px';
+          ttEl.style.top  = (e.originalEvent.clientY - 32) + 'px';
+        });
+        m.on('mouseout', () => { ttEl.style.display = 'none'; });
+        cableLayer.addLayer(m);
+      });
+      landingCount = landingGeo.features.length;
+
+      document.getElementById('cables-count').textContent =
+        cableCount.toLocaleString() + ' cables  \u00b7  ' + landingCount.toLocaleString() + ' landing points';
+    }).catch(err => {
+      document.getElementById('cables-count').textContent = 'Could not load cable data';
+      console.error(err);
+    });
+  }
+
+  document.getElementById('cables-toggle').addEventListener('change', e => {
+    if (e.target.checked) {
+      loadCables();
+      map.addLayer(cableLayer);
+    } else {
+      map.removeLayer(cableLayer);
+    }
+  });
+
   // ── Filter ────────────────────────────────────────────────────────────────
   function getSpec() {
     const n = v => v===''?null:+v;
@@ -408,6 +571,7 @@ window.addEventListener('load', function () {
     const matched = [];
     allPoints.forEach((d, i) => {
       if (activeCountry && d.country !== activeCountry) return;
+      if (hyperscaleOnly && !d.is_hyperscale) return;
       if (q && ![(d.name||''),(d.country||''),(d.address||'')].some(t=>t.toLowerCase().includes(q))) return;
       if (!okSpec(d._sp,s.sp)||!okSpec(d._co,s.co)||!okSpec(d._pw,s.pw)) return;
       matched.push(allMarkers[i]);
@@ -464,7 +628,7 @@ window.addEventListener('load', function () {
       const d = allPoints[+el.dataset.idx]; if (!d) return;
       closeDD(); searchEl.value=''; clearBtn.style.display='none';
       map.setView([d.lat, d.lng], 16);
-      setTimeout(() => showPopup(d, window.innerWidth/2, window.innerHeight/2+60), 400);
+      setTimeout(() => showPopup(buildPopup(d), window.innerWidth/2, window.innerHeight/2+60), 400);
     }));
     const pb = document.getElementById('sd-place');
     if (pb) pb.addEventListener('click', () => nominatimFly(q));
@@ -497,12 +661,17 @@ window.addEventListener('load', function () {
   document.getElementById('country-select').addEventListener('change',e=>{
     if(e.target.value)flyToCountry(e.target.value);else{activeCountry='';applyFilters();}
   });
+  document.getElementById('hyperscale-only').addEventListener('change',e=>{
+    hyperscaleOnly = e.target.checked;
+    applyFilters();
+  });
   document.getElementById('spec-toggle').addEventListener('click',function(){this.classList.toggle('open');document.getElementById('spec-panel').classList.toggle('open');});
   ['space-min','space-max','colo-min','colo-max','power-min','power-max'].forEach(id=>document.getElementById(id).addEventListener('input',applyFilters));
   ['space-req','colo-req','power-req'].forEach(id=>document.getElementById(id).addEventListener('change',applyFilters));
   document.getElementById('reset-btn').addEventListener('click',()=>{
-    searchEl.value='';activeSearch='';activeCountry='';clearBtn.style.display='none';closeDD();
+    searchEl.value='';activeSearch='';activeCountry='';hyperscaleOnly=false;clearBtn.style.display='none';closeDD();
     document.getElementById('country-select').value='';
+    document.getElementById('hyperscale-only').checked=false;
     document.getElementById('result-info').style.display='none';
     ['space-min','space-max','colo-min','colo-max','power-min','power-max'].forEach(id=>document.getElementById(id).value='');
     ['space-req','colo-req','power-req'].forEach(id=>document.getElementById(id).checked=false);
