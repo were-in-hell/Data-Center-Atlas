@@ -51,7 +51,15 @@ body{background:var(--bg);font-family:'IBM Plex Sans',sans-serif;color:var(--tex
 .dc-cluster:hover{transform:scale(1.1)}
 
 /* ── Panel ── */
-#panel{position:fixed;top:62px;left:12px;width:252px;background:var(--panel);border:1px solid var(--bdr);border-radius:10px;padding:14px;z-index:1500;backdrop-filter:blur(12px);display:flex;flex-direction:column;gap:12px;max-height:calc(100vh - 80px);overflow-y:auto}
+#panel{position:fixed;top:62px;left:12px;width:252px;background:var(--panel);border:1px solid var(--bdr);border-radius:10px;padding:14px;z-index:1500;backdrop-filter:blur(12px);display:flex;flex-direction:column;gap:12px;max-height:calc(100vh - 80px);overflow-y:auto;transition:width .18s ease,padding .18s ease}
+#panel-header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;cursor:move}
+#panel-title{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.18em;color:var(--muted)}
+#panel-toggle{flex-shrink:0;width:20px;height:20px;border-radius:5px;border:1px solid var(--bdr);background:rgba(255,255,255,.04);color:var(--text);font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+#panel-toggle:hover{background:rgba(255,255,255,.1)}
+#panel-body{display:flex;flex-direction:column;gap:12px;overflow-y:auto}
+#panel.collapsed{width:auto;padding:8px 10px;overflow:visible;gap:0}
+#panel.collapsed #panel-body{display:none}
+#panel.collapsed #panel-title{display:none}
 #panel::-webkit-scrollbar{width:4px}
 #panel::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px}
 .plbl{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-bottom:7px}
@@ -179,6 +187,11 @@ select option{background:#0b0f1a}
 </header>
 
 <div id="panel">
+  <div id="panel-header">
+    <span id="panel-title">ATLAS &amp; LEGEND</span>
+    <button id="panel-toggle" title="Minimize panel">&#8722;</button>
+  </div>
+  <div id="panel-body">
   <div id="precision-section">
     <div class="plbl">Precision <span id="zoom-hint">&#8212; zoom in to see</span></div>
     <div class="tier-row"><div class="tier-label"><div class="tier-dot" style="background:var(--green);box-shadow:0 0 6px var(--green)"></div>Street address</div><div class="tier-count" id="cnt-address">&#8212;</div></div>
@@ -215,6 +228,7 @@ select option{background:#0b0f1a}
   <hr class="pdiv"/>
   <button class="pbtn" id="reset-btn">Reset all filters</button>
   <div id="result-info"></div>
+  </div>
 </div>
 
 <div id="map"></div>
@@ -497,44 +511,58 @@ window.addEventListener('load', function () {
       fetch('cable-geo.json').then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); }),
       fetch('landing-point-geo.json').then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); }),
     ]).then(([cableGeo, landingGeo]) => {
+      // worldCopyJump lets the map pan infinitely east/west into repeated
+      // copies of the world, but a layer only exists once at its original
+      // coordinates - so cables/landing points "ran out" right at the edge
+      // of whichever copy they were drawn in. Drawing 3 copies of each,
+      // offset by -360/0/+360 degrees longitude, covers the copy you
+      // started in plus the two adjacent ones so panning across a seam
+      // never shows a gap.
+      const WORLD_OFFSETS = [-360, 0, 360];
+
       cableGeo.features.forEach(f => {
         const p = f.properties;
-        const latlngs = f.geometry.coordinates.map(line => line.map(([lng, lat]) => [lat, lng]));
+        const baseLatLngs = f.geometry.coordinates.map(line => line.map(([lng, lat]) => [lat, lng]));
         const baseStyle = { color: p.color || '#939597', weight: 1.6, opacity: 0.7 };
-        const line = L.polyline(latlngs, baseStyle);
-        line.on('click', e => {
-          L.DomEvent.stopPropagation(e);
-          showPopup(buildCablePopup(p), e.originalEvent.clientX, e.originalEvent.clientY);
+        WORLD_OFFSETS.forEach(offset => {
+          const latlngs = baseLatLngs.map(line => line.map(([lat, lng]) => [lat, lng + offset]));
+          const line = L.polyline(latlngs, baseStyle);
+          line.on('click', e => {
+            L.DomEvent.stopPropagation(e);
+            showPopup(buildCablePopup(p), e.originalEvent.clientX, e.originalEvent.clientY);
+          });
+          line.on('mouseover', () => line.setStyle({ weight: 3.2, opacity: 1 }));
+          line.on('mouseout',  () => line.setStyle(baseStyle));
+          cableLayer.addLayer(line);
         });
-        line.on('mouseover', () => line.setStyle({ weight: 3.2, opacity: 1 }));
-        line.on('mouseout',  () => line.setStyle(baseStyle));
-        cableLayer.addLayer(line);
       });
       cableCount = cableGeo.features.length;
 
       landingGeo.features.forEach(f => {
         const p = f.properties;
         const [lng, lat] = f.geometry.coordinates;
-        const m = L.circleMarker([lat, lng], {
-          radius: 3, weight: 1, color: 'rgba(255,255,255,0.55)',
-          fillColor: '#00d4ff', fillOpacity: 0.9,
+        WORLD_OFFSETS.forEach(offset => {
+          const m = L.circleMarker([lat, lng + offset], {
+            radius: 3, weight: 1, color: 'rgba(255,255,255,0.55)',
+            fillColor: '#00d4ff', fillOpacity: 0.9,
+          });
+          m.on('click', e => {
+            L.DomEvent.stopPropagation(e);
+            showPopup(buildLandingPopup(p), e.originalEvent.clientX, e.originalEvent.clientY);
+          });
+          m.on('mouseover', e => {
+            ttEl.textContent   = p.name;
+            ttEl.style.left    = (e.originalEvent.clientX + 14) + 'px';
+            ttEl.style.top     = (e.originalEvent.clientY - 32) + 'px';
+            ttEl.style.display = 'block';
+          });
+          m.on('mousemove', e => {
+            ttEl.style.left = (e.originalEvent.clientX + 14) + 'px';
+            ttEl.style.top  = (e.originalEvent.clientY - 32) + 'px';
+          });
+          m.on('mouseout', () => { ttEl.style.display = 'none'; });
+          cableLayer.addLayer(m);
         });
-        m.on('click', e => {
-          L.DomEvent.stopPropagation(e);
-          showPopup(buildLandingPopup(p), e.originalEvent.clientX, e.originalEvent.clientY);
-        });
-        m.on('mouseover', e => {
-          ttEl.textContent   = p.name;
-          ttEl.style.left    = (e.originalEvent.clientX + 14) + 'px';
-          ttEl.style.top     = (e.originalEvent.clientY - 32) + 'px';
-          ttEl.style.display = 'block';
-        });
-        m.on('mousemove', e => {
-          ttEl.style.left = (e.originalEvent.clientX + 14) + 'px';
-          ttEl.style.top  = (e.originalEvent.clientY - 32) + 'px';
-        });
-        m.on('mouseout', () => { ttEl.style.display = 'none'; });
-        cableLayer.addLayer(m);
       });
       landingCount = landingGeo.features.length;
 
@@ -552,6 +580,49 @@ window.addEventListener('load', function () {
       map.addLayer(cableLayer);
     } else {
       map.removeLayer(cableLayer);
+    }
+  });
+
+  // ── Panel minimize / reopen ─────────────────────────────────────────────────
+  const panelEl = document.getElementById('panel');
+  document.getElementById('panel-toggle').addEventListener('click', () => {
+    const collapsing = !panelEl.classList.contains('collapsed');
+    panelEl.classList.toggle('collapsed');
+    document.getElementById('panel-toggle').textContent = collapsing ? '\u002B' : '\u2212';
+    document.getElementById('panel-toggle').title = collapsing ? 'Reopen panel' : 'Minimize panel';
+  });
+
+  // ── Panel drag-to-reposition ─────────────────────────────────────────────
+  const panelHeaderEl = document.getElementById('panel-header');
+  let panelDragging = false, panelDragOffsetX = 0, panelDragOffsetY = 0;
+
+  panelHeaderEl.addEventListener('mousedown', e => {
+    if (e.target.closest('#panel-toggle')) return; // let the button handle its own click
+    panelDragging = true;
+    const rect = panelEl.getBoundingClientRect();
+    panelDragOffsetX = e.clientX - rect.left;
+    panelDragOffsetY = e.clientY - rect.top;
+    panelEl.style.transition = 'none';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!panelDragging) return;
+    const margin = 40; // keep at least this much of the panel reachable on-screen
+    const minLeft = -(panelEl.offsetWidth - margin);
+    const maxLeft = window.innerWidth - margin;
+    const minTop  = 0;
+    const maxTop  = window.innerHeight - margin;
+    const newLeft = Math.max(minLeft, Math.min(e.clientX - panelDragOffsetX, maxLeft));
+    const newTop  = Math.max(minTop,  Math.min(e.clientY - panelDragOffsetY, maxTop));
+    panelEl.style.left = newLeft + 'px';
+    panelEl.style.top  = newTop + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (panelDragging) {
+      panelDragging = false;
+      panelEl.style.transition = '';
     }
   });
 
