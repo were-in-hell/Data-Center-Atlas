@@ -388,10 +388,17 @@ window.addEventListener('load', function () {
   }
 
   function buildCablePopup(p) {
-    const url = `https://www.submarinecablemap.com/submarine-cable/${encodeURIComponent(p.id)}`;
+    const tgUrl = `https://www.submarinecablemap.com/submarine-cable/${encodeURIComponent(p.id)}`;
+    let rows = '';
+    if (p.rfs)                     rows += `<div class="pr"><div class="prl">RFS</div><div class="prv">${esc(p.rfs)}</div></div>`;
+    if (p.length_km != null)       rows += `<div class="pr"><div class="prl">Length</div><div class="prv">${Math.round(p.length_km).toLocaleString()} km</div></div>`;
+    if (p.owners && p.owners.length)       rows += `<div class="pr"><div class="prl">Owners</div><div class="prv">${esc(p.owners.join(', '))}</div></div>`;
+    if (p.suppliers && p.suppliers.length) rows += `<div class="pr"><div class="prl">Suppliers</div><div class="prv">${esc(p.suppliers.join(', '))}</div></div>`;
+    const notesNote = p.has_notes ? `<div class="pdesc">Additional notes available on the source page.</div>` : '';
+    const officialLink = p.url ? `<a class="plink" href="${esc(p.url)}" target="_blank" rel="noopener">Official site <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>` : '';
     return `<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
       <div class="ph"><div class="pn">${esc(p.name)}</div><div class="pc">Submarine cable</div></div>
-      <div class="pb"><div class="pacts"><a class="plink" href="${esc(url)}" target="_blank" rel="noopener">Cable details <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
+      <div class="pb">${rows}${notesNote}<div class="pacts"><a class="plink" href="${esc(tgUrl)}" target="_blank" rel="noopener">Cable details <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>${officialLink}</div></div>`;
   }
 
   function buildLandingPopup(p) {
@@ -510,7 +517,11 @@ window.addEventListener('load', function () {
     Promise.all([
       fetch('cable-geo.json').then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); }),
       fetch('landing-point-geo.json').then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); }),
-    ]).then(([cableGeo, landingGeo]) => {
+      // Optional enrichment file (rfs/length/owners/suppliers/url/has_notes) - keyed by cable id.
+      // Tolerant of 404/missing/malformed: falls back to {} so the basic cable map still works
+      // even before this file exists or if it's ever absent.
+      fetch('cable_details.json').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+    ]).then(([cableGeo, landingGeo, cableDetails]) => {
       // worldCopyJump lets the map pan infinitely east/west into repeated
       // copies of the world, but a layer only exists once at its original
       // coordinates - so cables/landing points "ran out" right at the edge
@@ -521,9 +532,17 @@ window.addEventListener('load', function () {
       const WORLD_OFFSETS = [-360, 0, 360];
 
       cableGeo.features.forEach(f => {
-        const p = f.properties;
+        // Merge in the enrichment record (if any) for this cable id. Spread order
+        // matters: geo properties first (id/name/color/feature_id), then details
+        // on top, so a detail record's own id/name (which should always agree)
+        // don't drop the geo-only `color` field needed for line styling.
+        const p = { ...f.properties, ...(cableDetails[f.properties.id] || {}) };
         const baseLatLngs = f.geometry.coordinates.map(line => line.map(([lng, lat]) => [lat, lng]));
         const baseStyle = { color: p.color || '#939597', weight: 1.6, opacity: 0.7 };
+        const hoverStyle = { weight: 3.2, opacity: 1 };
+        // All 3 longitude copies of this cable need to highlight together, not
+        // just whichever one the mouse happens to be over.
+        const siblingLines = [];
         WORLD_OFFSETS.forEach(offset => {
           const latlngs = baseLatLngs.map(line => line.map(([lat, lng]) => [lat, lng + offset]));
           const line = L.polyline(latlngs, baseStyle);
@@ -531,9 +550,12 @@ window.addEventListener('load', function () {
             L.DomEvent.stopPropagation(e);
             showPopup(buildCablePopup(p), e.originalEvent.clientX, e.originalEvent.clientY);
           });
-          line.on('mouseover', () => line.setStyle({ weight: 3.2, opacity: 1 }));
-          line.on('mouseout',  () => line.setStyle(baseStyle));
+          siblingLines.push(line);
           cableLayer.addLayer(line);
+        });
+        siblingLines.forEach(line => {
+          line.on('mouseover', () => siblingLines.forEach(l => l.setStyle(hoverStyle)));
+          line.on('mouseout',  () => siblingLines.forEach(l => l.setStyle(baseStyle)));
         });
       });
       cableCount = cableGeo.features.length;
