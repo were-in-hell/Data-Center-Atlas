@@ -70,6 +70,7 @@ body{background:var(--bg);font-family:'IBM Plex Sans',sans-serif;color:var(--tex
 #precision-section{transition:opacity .4s}
 #zoom-hint{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:.1em;color:var(--amber);display:none;margin-left:4px}
 select{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--bdr);border-radius:6px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px 8px;outline:none;cursor:pointer}
+input[type=range]{accent-color:var(--cyan);height:3px;cursor:pointer}
 select option{background:#0b0f1a}
 .pdiv{border:none;border-top:1px solid var(--bdr)}
 .pbtn{background:none;border:1px solid var(--bdr);border-radius:6px;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;padding:5px 10px;cursor:pointer;width:100%;text-transform:uppercase;transition:all .2s}
@@ -170,6 +171,12 @@ select option{background:#0b0f1a}
 .pevent-stage.operational{background:rgba(0,255,136,.1);color:var(--green)}
 .pevent-stage.construction{background:rgba(251,191,36,.12);color:var(--amber)}
 .pevent-stage.announced{background:rgba(0,212,255,.08);color:var(--cyan)}
+
+/* ── Power line select/dim: when a feature is selected, every other path in
+   the dedicated powerLines pane fades out so the selection actually stands
+   out instead of getting lost in the grid. ── */
+.power-dim-mode .leaflet-powerLines-pane svg path:not(.power-line-selected){opacity:.12!important;transition:opacity .15s}
+.power-dim-mode .leaflet-powerLines-pane svg path.power-line-selected{transition:opacity .15s}
 
 /* ── Flagged (controversial) data center markers ── */
 .dc-flagged{animation:dcFlagPulse 1.8s ease-in-out infinite}
@@ -272,7 +279,7 @@ select option{background:#0b0f1a}
       <div class="lg-row"><div class="lg-swatch" style="background:#7A7A85"></div>&lt;10 kV / unknown</div>
       <div class="lg-row"><div class="lg-swatch" style="background:#caa46b;opacity:.6"></div>Power plant (filled area)</div>
       <hr class="pdiv" style="margin:7px 0"/>
-      <div class="lg-sub">Click any line, substation or plant for its name, voltage, owner and routing &mdash; plus any tracked AI clusters within 75 km (straight-line distance; OpenStreetMap has no electrical-connectivity data, so this is a proxy, not a wiring diagram).</div>
+      <div class="lg-sub">Click any line, substation or plant to highlight it &mdash; everything else dims &mdash; and see its name, voltage, owner, routing, and tracked AI clusters within range (straight-line distance; OpenStreetMap has no electrical-connectivity data, so this is a proxy, not a wiring diagram).</div>
       <div class="lg-sub">Importance filter &mdash; higher kV = fewer, more critical backbone lines, the kind that actually feed gigawatt-scale AI campuses</div>
       <select id="power-voltage-filter" style="margin-top:5px">
         <option value="0">Show all voltages</option>
@@ -281,9 +288,21 @@ select option{background:#0b0f1a}
         <option value="220">&#8805;220 kV (extra-high voltage backbone)</option>
         <option value="310">&#8805;310 kV (UHV / bulk transmission only)</option>
       </select>
+      <div class="lg-sub" style="margin-top:10px">"Connected to a data center" isn't something any public dataset actually records (no one publishes electrical wiring diagrams) &mdash; so this slider sets a straight-line proximity radius instead. It drives both the halo below and the AI-cluster count in line popups.</div>
+      <div class="rr" style="margin-top:5px">
+        <input type="range" id="ai-radius-slider" min="10" max="150" step="5" value="75" style="flex:1"/>
+        <span class="rs" id="ai-radius-readout" style="min-width:46px;text-align:right">75 km</span>
+      </div>
       <label class="req" style="margin-top:8px">
-        <input type="checkbox" id="ai-catchment-toggle"/> Highlight grid catchment around AI clusters (40km)
+        <input type="checkbox" id="ai-catchment-toggle"/> Show proximity halos on the map
       </label>
+      <div class="lg-sub" style="margin-top:5px">Turning this on also switches the filter above to &#8805;220 kV, so only backbone-tier lines are left on the map &mdash; far less to wade through, and what's left is plausibly relevant to a gigawatt campus.</div>
+      <hr class="pdiv" style="margin:7px 0"/>
+      <div class="lg-sub">Data-center density filter &mdash; hides lines, substations and plants with fewer than this many data centers (any kind, full ~10.5k-record dataset, not just AI) within the proximity radius above. Same caveat as everywhere else here: this is geographic closeness, not a wiring diagram.</div>
+      <div class="rr" style="margin-top:5px">
+        <input type="range" id="dc-density-filter" min="0" max="200" step="5" value="0" style="flex:1"/>
+        <span class="rs" id="dc-density-readout" style="min-width:46px;text-align:right">Off</span>
+      </div>
     </div>
   </div>
   <div style="margin-top:8px">
@@ -353,6 +372,13 @@ window.addEventListener('load', function () {
     worldCopyJump: true,  // snap back when panning into a repeated world copy
   });
   L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+  // Dedicated pane for power-grid features only, so the "dim everything else"
+  // effect when a line is selected can be scoped with plain CSS instead of
+  // having to touch every feature individually.
+  map.createPane('powerLines');
+  map.getPane('powerLines').style.zIndex = 402;
+
   // Primary: CARTO dark matter (no retina suffix to keep URL simple)
   const tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_matter_all/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
@@ -524,7 +550,7 @@ window.addEventListener('load', function () {
       popupEl.style.left = x + 'px'; popupEl.style.top = y + 'px';
     });
   }
-  map.on('click', () => { popupEl.style.display = 'none'; });
+  map.on('click', () => { popupEl.style.display = 'none'; clearPowerSelection(); });
 
   // ── Data ──────────────────────────────────────────────────────────────────
   let allPoints = [], allMarkers = [];
@@ -582,6 +608,8 @@ window.addEventListener('load', function () {
       });
 
       clusterGroup.addLayers(allMarkers);
+      buildDcGridIndex();
+      reprocessAllLoadedPowerFeatures({ recomputeDistance: true });
 
       // Header
       document.getElementById('header-count').innerHTML =
@@ -732,12 +760,23 @@ window.addEventListener('load', function () {
   const belowFilter = p => (parseFloat(p.voltage) || 0) < minVoltageFilter;
 
   const powerLayer = L.vectorGrid.protobuf('https://openinframap.org/map/power/{z}/{x}/{y}.pbf', {
-    rendererFactory: L.canvas.tile,
+    // SVG, not canvas: Leaflet.VectorGrid's Canvas.Tile renderer never actually
+    // wires its click hit-testing to real DOM events (verified in its source) -
+    // the pointer cursor on hover comes from a tile-wide CSS rule, not a real
+    // per-feature hit. SVG.Tile registers each feature into Leaflet's own
+    // map._targets click system, which is what every other interactive Leaflet
+    // layer relies on, so clicks land reliably.
+    rendererFactory: L.svg.tile,
     maxNativeZoom: 17,
     attribution: OIM_ATTR,
     interactive: true,
+    pane: 'powerLines',
+    // Needed purely so Leaflet.VectorGrid keeps a reference to each tile's
+    // renderer around after the tile loads - that's what makes the
+    // data-center density filter below possible at all.
+    getFeatureId: f => (f.properties && f.properties.id != null) ? f.properties.id : Math.random(),
     vectorTileLayerStyles: {
-      power_line: (p, z) => belowFilter(p) ? hide() : ({ color: voltageColor(p.voltage), weight: Math.max(0.8, Math.min(3.2, (z - 3) * 0.35)), opacity: 0.8, dashArray: p.tunnel ? [2,3] : null }),
+      power_line: (p, z) => belowFilter(p) ? hide() : ({ color: voltageColor(p.voltage), weight: Math.max(1.5, Math.min(3.6, (z - 3) * 0.4)), opacity: 0.85, dashArray: p.tunnel ? [2,3] : null }),
       power_plant: () => ({ fill: true, fillColor: '#caa46b', fillOpacity: 0.18, color: '#caa46b', weight: 0.6, opacity: 0.45 }),
       power_substation: (p) => belowFilter(p) ? hide() : ({ fill: true, fillColor: voltageColor(p.voltage), fillOpacity: 0.3, color: 'rgba(0,0,0,0.45)', weight: 0.6 }),
       power_substation_point: (p, z) => belowFilter(p) ? hide() : ({ radius: z > 9 ? 3 : 1.6, fill: true, fillColor: voltageColor(p.voltage), fillOpacity: 0.9, color: 'rgba(255,255,255,0.5)', weight: 1 }),
@@ -747,16 +786,30 @@ window.addEventListener('load', function () {
   });
 
   const telecomLayer = L.vectorGrid.protobuf('https://openinframap.org/map/telecoms/{z}/{x}/{y}.pbf', {
-    rendererFactory: L.canvas.tile,
+    rendererFactory: L.svg.tile,
     maxNativeZoom: 17,
     attribution: OIM_ATTR,
     interactive: true,
     vectorTileLayerStyles: {
-      telecoms_communication_line: (p, z) => ({ color: '#a78bfa', weight: z > 9 ? 1.5 : 0.7, opacity: 0.62, dashArray: [3, 2] }),
+      telecoms_communication_line: (p, z) => ({ color: '#a78bfa', weight: z > 9 ? 1.8 : 1, opacity: 0.7, dashArray: [3, 2] }),
       telecoms_data_center: () => ({ fill: true, fillColor: '#a78bfa', fillOpacity: 0.16, color: '#a78bfa', weight: 0.6, opacity: 0.45 }),
       telecoms_data_center_point: (p, z) => ({ radius: z > 9 ? 3 : 1.6, fill: true, fillColor: '#a78bfa', fillOpacity: 0.9, color: 'rgba(255,255,255,0.5)', weight: 1 }),
       telecoms_mast: hide, telecoms_cabinet: hide,
     },
+  });
+
+  // Reprocess a tile's features for the density filter as soon as it loads.
+  // (processPowerFeature/reprocessAllLoadedPowerFeatures are defined further
+  // down, but as function declarations they're hoisted, so referencing them
+  // here is safe - this listener only ever fires later, after the whole
+  // script has finished running once.)
+  powerLayer.on('tileload', e => {
+    try {
+      const key = powerLayer._tileCoordsToKey(e.coords);
+      const renderer = powerLayer._vectorTiles && powerLayer._vectorTiles[key];
+      if (!renderer || !renderer._layers) return;
+      for (const stamp in renderer._layers) processPowerFeature(renderer._layers[stamp]);
+    } catch (err) { /* defensive */ }
   });
 
   // VectorGrid click events do NOT include a "which source-layer was this"
@@ -784,12 +837,44 @@ window.addEventListener('load', function () {
     showPopup(vgPopup(p.name || p.ref || fallback, p), e.originalEvent.clientX, e.originalEvent.clientY);
   });
 
+  // ── Power line selection: highlight the clicked feature, dim every other
+  // one in the powerLines pane. There's no real "selection" concept in
+  // VectorGrid, so this works directly on the clicked Leaflet Path object
+  // (e.layer) and its real DOM node (e.layer._path) - both are part of how
+  // Leaflet's SVG renderer has worked for years, just not in the public docs.
+  let selectedPowerLayer = null, selectedPowerOriginalStyle = null;
+  function clearPowerSelection() {
+    const layer = selectedPowerLayer;
+    selectedPowerLayer = null; selectedPowerOriginalStyle = null;
+    if (layer) {
+      try {
+        if (layer._path) layer._path.classList.remove('power-line-selected');
+        // Restore through the density filter, not blindly back to its
+        // pre-selection look, so a line that's since fallen below the
+        // density threshold (or whose radius changed) ends up hidden
+        // again instead of reappearing.
+        applyDensityVisibility(layer);
+      } catch (err) { /* tile may have unloaded already - nothing to clean up */ }
+    }
+    map.getContainer().classList.remove('power-dim-mode');
+  }
+
   powerLayer.on('click', e => {
     L.DomEvent.stopPropagation(e);
     const p = e.layer.properties || {};
     const kind = geometryKind(e.layer);
+    processPowerFeature(e.layer); // make sure _origStyleSnapshot/_dcCount exist before we override the style below
     const latlng = e.latlng || map.mouseEventToLatLng(e.originalEvent);
     const cx = e.originalEvent.clientX, cy = e.originalEvent.clientY;
+
+    clearPowerSelection();
+    selectedPowerLayer = e.layer;
+    selectedPowerOriginalStyle = Object.assign({}, e.layer.options);
+    e.layer.setStyle({ color: '#ffffff', weight: (e.layer.options.weight || 2) + 2.5, opacity: 1, dashArray: null });
+    if (e.layer._path) e.layer._path.classList.add('power-line-selected');
+    if (e.layer.bringToFront) e.layer.bringToFront();
+    map.getContainer().classList.add('power-dim-mode');
+
     showPopup(buildPowerLinePopup(p, kind, latlng), cx, cy);
     getAiClusters().then(() => {
       if (popupEl.style.display === 'block') showPopup(buildPowerLinePopup(p, kind, latlng), cx, cy);
@@ -798,7 +883,7 @@ window.addEventListener('load', function () {
 
   document.getElementById('power-toggle').addEventListener('change', e => {
     toggleLegend('legend-power', e.target.checked);
-    if (e.target.checked) { map.addLayer(powerLayer); getAiClusters(); } else { map.removeLayer(powerLayer); }
+    if (e.target.checked) { map.addLayer(powerLayer); getAiClusters(); } else { map.removeLayer(powerLayer); clearPowerSelection(); }
   });
   document.getElementById('telecom-toggle').addEventListener('change', e => {
     toggleLegend('legend-telecom', e.target.checked);
@@ -810,34 +895,56 @@ window.addEventListener('load', function () {
     if (map.hasLayer(powerLayer)) powerLayer.redraw();
   });
 
-  // ── AI cluster grid catchment (40km halos — visual proxy for "which power
-  // lines matter here", since OSM line features don't carry a load/customer
-  // attribute we could rank by) ──────────────────────────────────────────────
+  // ── AI cluster proximity radius (shared by the catchment halos below and
+  // the power-line popup's "nearby AI clusters" count) — a straight-line
+  // distance proxy, since no public dataset records which line actually
+  // feeds which campus. ───────────────────────────────────────────────────
+  let aiRadiusKm = 75;
   const aiCatchmentLayer = L.layerGroup();
-  let aiCatchmentLoaded = false;
-  function loadAiCatchment() {
-    if (aiCatchmentLoaded) return;
-    aiCatchmentLoaded = true;
-    getAiClusters()
-      .then(rows => {
-        rows.forEach(p => {
-          L.circle([p.lat, p.lon], {
-            radius: 40000,
-            color: '#fbbf24', weight: 1.4, opacity: 0.55, dashArray: [5, 4],
-            fill: true, fillColor: '#fbbf24', fillOpacity: 0.05,
-            interactive: false,
-          }).addTo(aiCatchmentLayer);
-        });
-      })
-      .catch(err => console.error(err));
+  let aiCatchmentVisible = false;
+  function rebuildAiCatchment() {
+    aiCatchmentLayer.clearLayers();
+    (aiClusterCache || []).forEach(p => {
+      L.circle([p.lat, p.lon], {
+        radius: aiRadiusKm * 1000,
+        color: '#fbbf24', weight: 1.4, opacity: 0.55, dashArray: [5, 4],
+        fill: true, fillColor: '#fbbf24', fillOpacity: 0.05,
+        interactive: false,
+      }).addTo(aiCatchmentLayer);
+    });
   }
+  function loadAiCatchment() {
+    getAiClusters().then(() => { if (aiCatchmentVisible) rebuildAiCatchment(); }).catch(err => console.error(err));
+  }
+  document.getElementById('ai-radius-slider').addEventListener('input', e => {
+    aiRadiusKm = parseFloat(e.target.value) || 75;
+    document.getElementById('ai-radius-readout').textContent = aiRadiusKm + ' km';
+    if (aiCatchmentVisible) rebuildAiCatchment();
+    reprocessAllLoadedPowerFeatures({ recomputeDistance: true });
+  });
+  document.getElementById('dc-density-filter').addEventListener('input', e => {
+    dcDensityThreshold = parseInt(e.target.value, 10) || 0;
+    document.getElementById('dc-density-readout').textContent = dcDensityThreshold === 0 ? 'Off' : ('≥' + dcDensityThreshold);
+    reprocessAllLoadedPowerFeatures({});
+  });
   document.getElementById('ai-catchment-toggle').addEventListener('change', e => {
+    aiCatchmentVisible = e.target.checked;
     if (e.target.checked) {
       loadAiCatchment();
       if (!map.hasLayer(powerLayer)) {
         map.addLayer(powerLayer); // catchment is meaningless without the grid visible
         document.getElementById('power-toggle').checked = true;
         toggleLegend('legend-power', true);
+      }
+      // Narrow to backbone-tier lines by default - these are the ones with
+      // enough capacity to plausibly feed a gigawatt-scale campus, and far
+      // fewer of them clutter the view, so there's actually something
+      // meaningful to click inside each AI cluster's halo.
+      const filterSelect = document.getElementById('power-voltage-filter');
+      if (minVoltageFilter < 220) {
+        filterSelect.value = '220';
+        minVoltageFilter = 220;
+        if (map.hasLayer(powerLayer)) powerLayer.redraw();
       }
       map.addLayer(aiCatchmentLayer);
     } else {
@@ -861,6 +968,99 @@ window.addEventListener('load', function () {
     const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
     const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
     return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  // ── Spatial index over the full data-center dataset, so "how many DCs are
+  // near this point" can be answered fast (a brute-force scan over ~10.5k
+  // points for every rendered power-line feature would be too slow to redo
+  // on every tile load). 1-degree grid cells; query expands to whichever
+  // cells the search radius could reach. ─────────────────────────────────
+  let dcGridIndex = null;
+  const DC_GRID_DEG = 1;
+  function buildDcGridIndex() {
+    if (!allPoints.length) return;
+    const idx = new Map();
+    allPoints.forEach(d => {
+      if (typeof d.lat !== 'number' || typeof d.lng !== 'number') return;
+      const key = Math.floor(d.lat / DC_GRID_DEG) + '_' + Math.floor(d.lng / DC_GRID_DEG);
+      let bucket = idx.get(key);
+      if (!bucket) idx.set(key, bucket = []);
+      bucket.push(d);
+    });
+    dcGridIndex = idx;
+  }
+  function countDcNear(lat, lng, radiusKm) {
+    if (!dcGridIndex) return 0;
+    const latSpan = radiusKm / 111 + DC_GRID_DEG;
+    const lngSpan = radiusKm / (111 * Math.max(0.15, Math.cos(lat * Math.PI / 180))) + DC_GRID_DEG;
+    const minCY = Math.floor((lat - latSpan) / DC_GRID_DEG), maxCY = Math.floor((lat + latSpan) / DC_GRID_DEG);
+    const minCX = Math.floor((lng - lngSpan) / DC_GRID_DEG), maxCX = Math.floor((lng + lngSpan) / DC_GRID_DEG);
+    let count = 0;
+    for (let cy = minCY; cy <= maxCY; cy++) {
+      for (let cx = minCX; cx <= maxCX; cx++) {
+        const bucket = dcGridIndex.get(cx + '_' + cy);
+        if (!bucket) continue;
+        for (let i = 0; i < bucket.length; i++) {
+          if (haversineKm(lat, lng, bucket[i].lat, bucket[i].lng) <= radiusKm) count++;
+        }
+      }
+    }
+    return count;
+  }
+
+  // ── Data-center density filter for power lines ───────────────────────────
+  // VectorGrid's style functions only ever see a feature's OSM tags, never
+  // its geometry, so there's no documented way to filter lines by "what's
+  // nearby". This reaches into the renderer Leaflet.VectorGrid builds for
+  // each tile (only kept around because getFeatureId is set below) to grab
+  // the real, already-rendered Polyline/CircleMarker objects, which DO have
+  // real coordinates. Everything here is wrapped defensively: if these
+  // internals ever shift in a library update, the filter just stops doing
+  // anything instead of breaking the rest of the page.
+  let dcDensityThreshold = 0;
+  function getFeatureRepresentativePoint(layer) {
+    try {
+      if (typeof layer.getLatLng === 'function') return layer.getLatLng();
+      if (typeof layer.getLatLngs === 'function') {
+        const flat = [];
+        (function flatten(arr) { arr.forEach(x => Array.isArray(x) ? flatten(x) : flat.push(x)); })(layer.getLatLngs());
+        return flat.length ? flat[Math.floor(flat.length / 2)] : null;
+      }
+    } catch (err) { /* ignore */ }
+    return null;
+  }
+  function applyDensityVisibility(layer) {
+    if (!layer || layer === selectedPowerLayer || layer._dcCount == null) return;
+    try {
+      if (layer._dcCount < dcDensityThreshold) {
+        layer.setStyle(hide());
+      } else if (layer._origStyleSnapshot) {
+        layer.setStyle(layer._origStyleSnapshot);
+      }
+    } catch (err) { /* tile may have unloaded mid-update */ }
+  }
+  function processPowerFeature(layer, opts) {
+    try {
+      if (layer._dcCount == null || (opts && opts.recomputeDistance)) {
+        const pt = getFeatureRepresentativePoint(layer);
+        layer._dcCount = pt ? countDcNear(pt.lat, pt.lng, aiRadiusKm) : 0;
+        layer._origStyleSnapshot = Object.assign({}, layer.options);
+      }
+      applyDensityVisibility(layer);
+    } catch (err) { /* defensive - never let this break the map */ }
+  }
+  function reprocessAllLoadedPowerFeatures(opts) {
+    try {
+      const tiles = powerLayer._vectorTiles;
+      if (!tiles) return;
+      for (const key in tiles) {
+        const renderer = tiles[key];
+        if (!renderer || !renderer._layers) continue;
+        for (const stamp in renderer._layers) {
+          processPowerFeature(renderer._layers[stamp], opts);
+        }
+      }
+    } catch (err) { /* VectorGrid internals not what we expected - filter no-ops */ }
   }
 
   // ── Power line inspector ─────────────────────────────────────────────────
@@ -899,11 +1099,22 @@ window.addEventListener('load', function () {
 
     let aiRows = '<div style="font-size:10px;color:var(--muted)">Loading nearby AI clusters&#8230;</div>';
     const nearby = (aiClusterCache || []).map(c => ({ c, d: haversineKm(latlng.lat, latlng.lng, c.lat, c.lon) }))
-      .filter(x => x.d <= 75).sort((a,b) => a.d - b.d).slice(0, 5);
+      .filter(x => x.d <= aiRadiusKm).sort((a,b) => a.d - b.d).slice(0, 8);
     if (aiClusterCache) {
       aiRows = nearby.length
         ? nearby.map(x => `<div class="pr"><div class="prl">${x.d.toFixed(0)} KM</div><div class="prv">${esc(x.c.name)} (${esc(x.c.city)}, ${esc(x.c.country)})</div></div>`).join('')
-        : '<div style="font-size:10px;color:var(--muted)">None of the tracked AI clusters are within 75 km of this point.</div>';
+        : `<div style="font-size:10px;color:var(--muted)">None of the tracked AI clusters are within ${aiRadiusKm} km of this point.</div>`;
+    }
+
+    // General data-center density: the full ~10.5k-record dataset (mostly
+    // colocation/cloud/enterprise facilities, not AI-specific), used as a
+    // second, complementary signal - high DC density nearby is at least
+    // suggestive of where power infrastructure investment concentrates,
+    // even though most of those facilities aren't AI compute.
+    let dcDensityRow = '';
+    if (allPoints.length) {
+      const dcCount = allPoints.reduce((n, d) => n + (haversineKm(latlng.lat, latlng.lng, d.lat, d.lng) <= aiRadiusKm ? 1 : 0), 0);
+      dcDensityRow = `<div class="pr"><div class="prl">DC DENSITY</div><div class="prv">${dcCount.toLocaleString()} data center${dcCount===1?'':'s'} of any kind within ${aiRadiusKm} km</div></div>`;
     }
 
     return `<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
@@ -913,8 +1124,9 @@ window.addEventListener('load', function () {
         <div class="pr"><div class="prl">OWNER</div><div class="prv">${owner ? esc(owner) : 'Not tagged in OpenStreetMap'}</div></div>
         ${kind === 'line' ? `<div class="pr"><div class="prl">ROUTING</div><div class="prv">${undergroundLabel(p)}</div></div>` : ''}
         ${otherRows}
+        ${dcDensityRow}
         <hr class="pdivider"/>
-        <div class="pevents-title">AI clusters within 75 km (straight-line, not electrical)</div>
+        <div class="pevents-title">${nearby.length} AI cluster${nearby.length===1?'':'s'} within ${aiRadiusKm} km (straight-line, not electrical &mdash; adjust the radius in the Power grid legend)</div>
         ${aiRows}
       </div>`;
   }
