@@ -179,11 +179,15 @@ select option{background:#0b0f1a}
 .ixp-marker{width:11px;height:11px;background:rgba(0,212,255,0.85);border:1px solid rgba(255,255,255,0.55);transform:rotate(45deg);box-shadow:0 0 5px rgba(0,212,255,0.6);cursor:pointer}
 .ixp-marker:hover{background:#fff}
 
-/* ── AI compute cluster markers (square + glow — the flagship layer) ── */
-.ai-marker{width:16px;height:16px;display:flex;align-items:center;justify-content:center;cursor:pointer}
-.ai-marker .core{width:100%;height:100%;background:rgba(167,139,250,0.85);border:1.5px solid #fff;border-radius:3px;box-shadow:0 0 10px rgba(167,139,250,0.9),0 0 2px rgba(255,255,255,0.8);animation:aiPulse 2.4s ease-in-out infinite}
-@keyframes aiPulse{0%,100%{box-shadow:0 0 8px rgba(167,139,250,0.8),0 0 2px rgba(255,255,255,0.7)}50%{box-shadow:0 0 16px rgba(167,139,250,1),0 0 4px rgba(255,255,255,0.9)}}
-.ai-chip{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9px;background:rgba(167,139,250,.14);border:1px solid rgba(167,139,250,.3);border-radius:4px;padding:2px 6px;color:#a78bfa;margin-right:5px}
+/* ── AI compute cluster markers — a dark shard with a malevolent glowing eye.
+   Intentionally ominous: this is the layer meant to make people uneasy. ── */
+.ai-marker{width:22px;height:22px;position:relative;cursor:pointer}
+.ai-marker .shard{position:absolute;inset:0;background:linear-gradient(150deg,#1c0509,#050103 65%);clip-path:polygon(50% 0%,88% 22%,100% 68%,50% 100%,0% 68%,12% 22%);border:1px solid rgba(255,40,40,.65);box-shadow:0 0 6px rgba(255,20,20,.55),0 0 16px rgba(180,0,0,.35);animation:evilPulse 2.1s ease-in-out infinite}
+.ai-marker .eye{position:absolute;top:54%;left:50%;width:5px;height:5px;border-radius:50%;background:#ff2222;box-shadow:0 0 5px #ff3030,0 0 12px rgba(255,0,0,.9);transform:translate(-50%,-50%);animation:eyeFlicker 3.1s ease-in-out infinite}
+.ai-marker .crack{position:absolute;top:18%;left:46%;width:1px;height:30%;background:rgba(255,60,60,.55);transform:rotate(12deg);filter:blur(.2px)}
+@keyframes evilPulse{0%,100%{box-shadow:0 0 5px rgba(255,20,20,.5),0 0 13px rgba(160,0,0,.3);transform:scale(1)}50%{box-shadow:0 0 11px rgba(255,40,40,.95),0 0 24px rgba(220,0,0,.6);transform:scale(1.05)}}
+@keyframes eyeFlicker{0%,38%,100%{opacity:1}44%{opacity:.15}50%{opacity:1}72%{opacity:.5}76%{opacity:1}}
+.ai-chip{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9px;background:rgba(255,30,30,.12);border:1px solid rgba(255,30,30,.32);border-radius:4px;padding:2px 6px;color:#ff5050;margin-right:5px}
 
 /* ── Tooltip ── */
 #tooltip{position:fixed;z-index:1900;display:none;pointer-events:none;background:rgba(11,15,26,.95);border:1px solid var(--bdr);border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text);padding:5px 9px;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;backdrop-filter:blur(8px)}
@@ -268,6 +272,7 @@ select option{background:#0b0f1a}
       <div class="lg-row"><div class="lg-swatch" style="background:#7A7A85"></div>&lt;10 kV / unknown</div>
       <div class="lg-row"><div class="lg-swatch" style="background:#caa46b;opacity:.6"></div>Power plant (filled area)</div>
       <hr class="pdiv" style="margin:7px 0"/>
+      <div class="lg-sub">Click any line, substation or plant for its name, voltage, owner and routing &mdash; plus any tracked AI clusters within 75 km (straight-line distance; OpenStreetMap has no electrical-connectivity data, so this is a proxy, not a wiring diagram).</div>
       <div class="lg-sub">Importance filter &mdash; higher kV = fewer, more critical backbone lines, the kind that actually feed gigawatt-scale AI campuses</div>
       <select id="power-voltage-filter" style="margin-top:5px">
         <option value="0">Show all voltages</option>
@@ -308,7 +313,7 @@ select option{background:#0b0f1a}
     </label>
     <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px" id="ai-count">&#8212;</div>
     <div class="layer-legend" id="legend-ai">
-      <div class="lg-row"><div class="ai-marker" style="position:static"><div class="core"></div></div>Announced AI GPU/TPU cluster &middot; hand-curated, see popups for sources</div>
+      <div class="lg-row"><div class="ai-marker" style="position:relative;width:14px;height:14px;flex-shrink:0"><div class="shard"></div><div class="eye"></div></div>Announced AI GPU/TPU cluster &middot; Epoch AI (satellite/permits) + research, see popups for sources</div>
       <div class="lg-row"><div class="lg-dot" style="background:transparent;border:2.5px solid #f87171"></div>Pulsing red ring on a data-center dot = flagged controversy</div>
     </div>
   </div>
@@ -760,17 +765,27 @@ window.addEventListener('load', function () {
     return `<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
       <div class="ph"><div class="pn">${esc(title)}</div></div><div class="pb">${rows}</div>`;
   }
-  [powerLayer, telecomLayer].forEach(layer => {
-    layer.on('click', e => {
-      L.DomEvent.stopPropagation(e);
-      const p = e.layer.properties || {};
-      showPopup(vgPopup(p.name || p.ref || e.layerName.replace(/_/g,' '), p), e.originalEvent.clientX, e.originalEvent.clientY);
+  telecomLayer.on('click', e => {
+    L.DomEvent.stopPropagation(e);
+    const p = e.layer.properties || {};
+    showPopup(vgPopup(p.name || p.ref || e.layerName.replace(/_/g,' '), p), e.originalEvent.clientX, e.originalEvent.clientY);
+  });
+
+  powerLayer.on('click', e => {
+    L.DomEvent.stopPropagation(e);
+    const p = e.layer.properties || {};
+    const layerName = e.layerName;
+    const latlng = e.latlng || map.mouseEventToLatLng(e.originalEvent);
+    const cx = e.originalEvent.clientX, cy = e.originalEvent.clientY;
+    showPopup(buildPowerLinePopup(p, layerName, latlng), cx, cy);
+    getAiClusters().then(() => {
+      if (popupEl.style.display === 'block') showPopup(buildPowerLinePopup(p, layerName, latlng), cx, cy);
     });
   });
 
   document.getElementById('power-toggle').addEventListener('change', e => {
     toggleLegend('legend-power', e.target.checked);
-    if (e.target.checked) map.addLayer(powerLayer); else map.removeLayer(powerLayer);
+    if (e.target.checked) { map.addLayer(powerLayer); getAiClusters(); } else { map.removeLayer(powerLayer); }
   });
   document.getElementById('telecom-toggle').addEventListener('change', e => {
     toggleLegend('legend-telecom', e.target.checked);
@@ -790,8 +805,7 @@ window.addEventListener('load', function () {
   function loadAiCatchment() {
     if (aiCatchmentLoaded) return;
     aiCatchmentLoaded = true;
-    fetch('ai_clusters.json')
-      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    getAiClusters()
       .then(rows => {
         rows.forEach(p => {
           L.circle([p.lat, p.lon], {
@@ -817,6 +831,78 @@ window.addEventListener('load', function () {
       map.removeLayer(aiCatchmentLayer);
     }
   });
+
+  // ── Shared AI cluster data cache (used by the AI layer, the grid catchment
+  // halos, and the power-line inspector's "nearby AI clusters" lookup) ──────
+  let aiClusterCache = null, aiClusterPromise = null;
+  function getAiClusters() {
+    if (aiClusterPromise) return aiClusterPromise;
+    aiClusterPromise = fetch('ai_clusters.json')
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(rows => { aiClusterCache = rows; return rows; })
+      .catch(err => { console.error(err); aiClusterCache = []; return []; });
+    return aiClusterPromise;
+  }
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371, toRad = d => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  // ── Power line inspector ─────────────────────────────────────────────────
+  // OSM carries no electrical-connectivity data (which substations feed which
+  // lines feed which campuses isn't something OpenStreetMap or any open
+  // dataset records), so "clusters connected to this line" can't be computed
+  // exactly. What we show instead, clearly labelled as such, is straight-line
+  // distance from the clicked point to every tracked AI cluster - an honest
+  // proxy rather than a claim of an actual electrical link.
+  const POWER_LABELS = {
+    power_line: 'Transmission line', power_substation: 'Substation', power_substation_point: 'Substation',
+    power_plant: 'Power plant',
+  };
+  function voltageLabel(p) {
+    const vs = [p.voltage, p.voltage_2, p.voltage_3].filter(v => v != null && v !== '');
+    if (!vs.length) return null;
+    return vs.map(v => `${(+v).toLocaleString()} kV`).join(' / ');
+  }
+  function undergroundLabel(p) {
+    const loc = (p.location || '').toLowerCase();
+    if (loc.includes('underground')) return 'Underground (buried cable)';
+    if (loc.includes('overground') || loc.includes('overhead')) return 'Overhead';
+    if (p.tunnel) return 'Underground (tunnel)';
+    return 'Overhead (no underground tag in OpenStreetMap — this is the default for power=line)';
+  }
+  function buildPowerLinePopup(p, layerName, latlng) {
+    const noun = POWER_LABELS[layerName] || layerName.replace(/^power_/, '').replace(/_/g, ' ');
+    const title = p.name || p.ref || `Unnamed ${noun.toLowerCase()}`;
+    const voltage = voltageLabel(p);
+    const owner = p.operator || null;
+    const shown = new Set(['name','ref','voltage','voltage_2','voltage_3','operator','location','tunnel','id']);
+    const otherRows = Object.entries(p).filter(([k,v]) => !shown.has(k) && v != null && v !== '')
+      .map(([k,v]) => `<div class="pr"><div class="prl">${esc(k).toUpperCase()}</div><div class="prv">${esc(v)}</div></div>`).join('');
+
+    let aiRows = '<div style="font-size:10px;color:var(--muted)">Loading nearby AI clusters&#8230;</div>';
+    const nearby = (aiClusterCache || []).map(c => ({ c, d: haversineKm(latlng.lat, latlng.lng, c.lat, c.lon) }))
+      .filter(x => x.d <= 75).sort((a,b) => a.d - b.d).slice(0, 5);
+    if (aiClusterCache) {
+      aiRows = nearby.length
+        ? nearby.map(x => `<div class="pr"><div class="prl">${x.d.toFixed(0)} KM</div><div class="prv">${esc(x.c.name)} (${esc(x.c.city)}, ${esc(x.c.country)})</div></div>`).join('')
+        : '<div style="font-size:10px;color:var(--muted)">None of the tracked AI clusters are within 75 km of this point.</div>';
+    }
+
+    return `<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
+      <div class="ph"><div class="pn">${esc(title)}</div><div class="pc">${esc(noun)} &middot; OpenStreetMap / Open Infrastructure Map</div></div>
+      <div class="pb">
+        ${voltage ? `<div class="pr"><div class="prl">VOLTAGE</div><div class="prv">${voltage}</div></div>` : ''}
+        <div class="pr"><div class="prl">OWNER</div><div class="prv">${owner ? esc(owner) : 'Not tagged in OpenStreetMap'}</div></div>
+        ${layerName === 'power_line' ? `<div class="pr"><div class="prl">ROUTING</div><div class="prv">${undergroundLabel(p)}</div></div>` : ''}
+        ${otherRows}
+        <hr class="pdivider"/>
+        <div class="pevents-title">AI clusters within 75 km (straight-line, not electrical)</div>
+        ${aiRows}
+      </div>`;
+  }
 
   // ── Internet Exchange Points (Packet Clearing House directory) ─────────────
   const ixpLayer = L.layerGroup();
@@ -865,11 +951,12 @@ window.addEventListener('load', function () {
 
   // ── AI compute clusters (hand-curated — see ai_clusters.json) ───────────────
   const aiLayer = L.layerGroup();
-  const aiIcon = L.divIcon({ className: '', html: '<div class="ai-marker"><div class="core"></div></div>', iconSize: [16,16], iconAnchor: [8,8] });
+  const aiIcon = L.divIcon({ className: '', html: '<div class="ai-marker"><div class="shard"></div><div class="crack"></div><div class="eye"></div></div>', iconSize: [22,22], iconAnchor: [11,11] });
   let aiLoaded = false;
 
   function buildAiPopup(p) {
-    const chips = [p.operator, p.gpu_type, p.scale].filter(Boolean).map(c => `<span class="ai-chip">${esc(c)}</span>`).join('');
+    const costChip = p.cost_usd_b ? `~$${(+p.cost_usd_b).toFixed(1)}B capital cost` : null;
+    const chips = [p.operator, p.gpu_type, p.scale, costChip].filter(Boolean).map(c => `<span class="ai-chip">${esc(c)}</span>`).join('');
     const statusBadge = p.status ? `<span class="status-badge ${String(p.status).toLowerCase().replace(/[^a-z]/g,'').replace('underconstruction','construction')}">${esc(p.status)}</span>` : '';
     const sources = (p.sources || []).map((s,i) => `<a class="plink" href="${esc(s)}" target="_blank" rel="noopener">Source ${i+1} <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`).join('');
     return `<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
@@ -886,8 +973,7 @@ window.addEventListener('load', function () {
   function loadAi() {
     if (aiLoaded) return;
     aiLoaded = true;
-    fetch('ai_clusters.json')
-      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    getAiClusters()
       .then(rows => {
         rows.forEach(p => {
           const m = L.marker([p.lat, p.lon], { icon: aiIcon });
@@ -899,7 +985,7 @@ window.addEventListener('load', function () {
           m.on('mouseout', () => { ttEl.style.display = 'none'; });
           aiLayer.addLayer(m);
         });
-        document.getElementById('ai-count').textContent = rows.length.toLocaleString() + ' announced clusters (hand-curated)';
+        document.getElementById('ai-count').textContent = rows.length.toLocaleString() + ' clusters · Epoch AI (satellite/permits) + research';
       })
       .catch(err => {
         document.getElementById('ai-count').textContent = 'Could not load AI cluster data';
