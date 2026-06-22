@@ -11,7 +11,15 @@
     "status": "Operational",
     "announced": "2024",
     "description": "The world's largest single-coherent AI training cluster as of early 2026, built in a former Electrolux factory in south Memphis. xAI added a third building (\"Macrohardrr\") in Dec. 2025, pushing site capacity toward 2 GW and a stated goal of 1 million GPUs.",
-    "sources": ["https://introl.com/blog/xai-colossus-2-gigawatt-expansion-555k-gpus-january-2026", "https://x.ai/colossus"]
+    "sources": ["https://introl.com/blog/xai-colossus-2-gigawatt-expansion-555k-gpus-january-2026", "https://x.ai/colossus"],
+    "controversy": {
+      "summary": "xAI ran dozens of unpermitted gas turbines at the site for over a year, in a majority-Black South Memphis neighborhood already burdened with industrial pollution (cancer risk ~4x the national average in nearby Boxtown). Studies link the turbines to a sharp rise in local nitrogen dioxide levels; the Southern Environmental Law Center and Earthjustice sued on behalf of the NAACP, and a U.S. Senator opened an investigation into the unpermitted operation.",
+      "links": [
+        {"title": "SELC: \"xAI built an illegal power plant\"", "url": "https://www.selc.org/news/xai-built-an-illegal-power-plant-to-power-its-data-center/"},
+        {"title": "Inside Climate News investigation", "url": "https://insideclimatenews.org/news/17072025/elon-musk-xai-data-center-gas-turbines-memphis/"},
+        {"title": "TIME: Memphis' battle against xAI", "url": "https://time.com/7308925/elon-musk-memphis-ai-data-center/"}
+      ]
+    }
   },
   {
     "name": "Stargate Abilene (Site 1)",
@@ -194,5 +202,117 @@
     "announced": "2025",
     "description": "One of Google's largest data center campuses, now racking the first of Anthropic's Ironwood TPU pods (9,216 chips each) as part of a deal for up to a million TPUs and over a gigawatt of capacity.",
     "sources": ["https://www.forwardfuture.ai/p/the-ai-compute-boom-has-room-for-everyone"]
+  },
+  {
+    "name": "Stargate UAE",
+    "operator": "G42 / OpenAI / Oracle / SoftBank / Cisco / NVIDIA",
+    "city": "Abu Dhabi",
+    "country": "United Arab Emirates",
+    "lat": 24.4539,
+    "lon": 54.3773,
+    "gpu_type": "NVIDIA GB300 (Grace Blackwell)",
+    "scale": "First 200 MW phase live 2026; campus planned to reach 5 GW over ~19.2 km²",
+    "status": "Under construction",
+    "announced": "2025",
+    "description": "The largest announced AI data center campus outside the United States, anchored by G42 and operated jointly with OpenAI and Oracle. First 200 MW cluster targeted for 2026; full build envisions 5 GW powered by a mix of nuclear, solar and gas.",
+    "sources": ["https://www.thenationalnews.com/future/technology/2026/01/26/stargate-uae-data-centre-to-cost-more-than-30bn-ai-minister-says/", "https://www.g42.ai/resources/news/global-tech-alliance-launches-stargate-uae"]
+  },
+  {
+    "name": "Mistral AI Campus (Bruyères-le-Châtelet)",
+    "operator": "Mistral AI / Nvidia / Bpifrance / MGX",
+    "city": "Bruyères-le-Châtel",
+    "country": "France",
+    "lat": 48.5377,
+    "lon": 2.2767,
+    "gpu_type": "13,800 NVIDIA GB300",
+    "scale": "44 MW initial; roadmap to 200 MW by 2027 and part of a planned 1.4-3 GW Paris-region campus by 2030",
+    "status": "Operational (expanding)",
+    "announced": "2025",
+    "description": "France's flagship sovereign-AI cluster, south of Paris, backed by a joint venture between Mistral AI, Nvidia, France's Bpifrance and Abu Dhabi's MGX aiming to build Europe's largest AI campus.",
+    "sources": ["https://www.datacenterdynamics.com/en/news/mgx-bpifrance-nvidia-and-mistral-ai-plan-14gw-paris-data-center-campus/", "https://www.aichatdaily.com/ai-business/france-s-ai-buildout-goes-live-mistral-data"]
+  },
+  {
+    "name": "Stargate UK (Cobalt Park)",
+    "operator": "Nscale / Microsoft / NVIDIA / OpenAI",
+    "city": "North Tyneside",
+    "country": "United Kingdom",
+    "lat": 55.013,
+    "lon": -1.466,
+    "gpu_type": "NVIDIA (up to 31,000 GPUs planned)",
+    "scale": "~8,000 GPUs offtake in early 2026, scaling toward 31,000",
+    "status": "Paused / under review",
+    "announced": "2025",
+    "description": "UK \"AI Growth Zone\" site built by Nscale. OpenAI initially committed to offtake compute here under Stargate UK, but paused its rental in 2026 citing high UK energy costs and regulatory uncertainty; Nscale's build continues with Microsoft and Nvidia as partners.",
+    "sources": ["https://www.datacenterdynamics.com/en/news/openai-announces-stargate-uk-with-up-to-8000-gpus-at-nscale-data-centers/", "https://aimagazine.com/news/why-is-openai-pulling-out-of-its-stargate-project-in-the-uk"]
+  },
+  {
+    "name": "Stargate Norway (Kvandal)",
+    "operator": "Nscale / Aker / Microsoft",
+    "city": "Narvik",
+    "country": "Norway",
+    "lat": 68.45,
+    "lon": 17.43,
+    "gpu_type": "NVIDIA (100,000 GPUs planned)",
+    "scale": "230 MW initial, expandable to 520 MW",
+    "status": "Under construction",
+    "announced": "2025",
+    "description": "OpenAI's first announced European data center, in the Arctic Circle near Narvik to exploit abundant local hydropower. OpenAI itself stepped back from renting the capacity in April 2026; Microsoft is taking up the spare capacity instead, with the Nscale/Aker joint venture still building.",
+    "sources": ["https://www.nscale.com/press-releases/stargate-norway-nscale-aker-openai", "https://www.cnbc.com/2026/04/15/openai-stargate-norway-project-microsoft.html", "https://time.com/article/2026/06/03/ai-norway-nscale-data-center/"]
+  },
+  {
+    "name": "Stargate Argentina (Patagonia)",
+    "operator": "OpenAI / Sur Energy",
+    "city": "Patagonia (exact site TBD)",
+    "country": "Argentina",
+    "lat": -45.0,
+    "lon": -70.0,
+    "gpu_type": "Not yet disclosed",
+    "scale": "500 MW planned (first 100 MW phase ~2027)",
+    "status": "Announced",
+    "announced": "2026",
+    "description": "OpenAI's first Latin American Stargate site, a letter-of-intent project with Argentine-US firm Sur Energy in southern Patagonia, framed as a $25bn investment. Exact location not yet finalized as of mid-2026, so the marker is placed at an approximate Patagonia location.",
+    "sources": ["https://www.datacenterdynamics.com/en/news/openai-plans-500mw-data-center-in-argentina/", "https://www.bnamericas.com/en/features/argentina-joins-openais-stargate-project-with-a-500mw-megadata-center"]
+  },
+  {
+    "name": "Reliance Intelligence AI Campus",
+    "operator": "Reliance Intelligence / Meta",
+    "city": "Jamnagar",
+    "country": "India",
+    "lat": 22.4707,
+    "lon": 70.0577,
+    "gpu_type": "NVIDIA GB300 (path to 200,000+ H100-equivalent)",
+    "scale": "120 MW commissioning end-2026, part of a $110B AI infrastructure commitment",
+    "status": "Under construction",
+    "announced": "2026",
+    "description": "India's largest announced AI compute campus, powered entirely by Reliance's Kutch solar platform. Meta is leasing 168 MW of capacity here for its first built-to-suit AI data center in India; framed by Reliance as part of a \"sovereign AI backbone\" for Indic-language models.",
+    "sources": ["https://letsdatascience.com/news/reliance-intelligence-operationalises-120mw-ai-backbone-in-j-e028b01c", "https://www.datacenterdynamics.com/en/news/reliance-industries-to-build-gw-scale-ai-data-center-in-gujurat-india/"]
+  },
+  {
+    "name": "Stargate Korea (Southwest region)",
+    "operator": "SK Telecom / OpenAI",
+    "city": "Southwest South Korea (exact site TBD)",
+    "country": "South Korea",
+    "lat": 35.82,
+    "lon": 126.7,
+    "gpu_type": "Not yet disclosed",
+    "scale": "Not yet disclosed",
+    "status": "Announced (MoU stage)",
+    "announced": "2026",
+    "description": "SK Telecom signed an MoU with OpenAI to develop, build and operate an AI data center in southwest South Korea as part of Stargate's hardware-supply partnership with Samsung Electronics and SK Hynix (HBM memory). Exact site not yet disclosed; marker placed near the Saemangeum industrial zone, the region most associated with the announcement.",
+    "sources": ["https://www.datacenterdynamics.com/en/news/openai-plans-stargate-data-center-in-south-korea-samsung-electronics-sk-hynix-to-supply-memory-chips/", "https://openai.com/index/samsung-and-sk-join-stargate/"]
+  },
+  {
+    "name": "Alibaba Zhenwu Data Center",
+    "operator": "Alibaba Cloud",
+    "city": "Shaoguan",
+    "country": "China",
+    "lat": 24.8108,
+    "lon": 113.5972,
+    "gpu_type": "Domestic chips (Alibaba self-developed + Huawei Ascend ecosystem)",
+    "scale": "Targeting ~100,000 chips",
+    "status": "Operational (expanding)",
+    "announced": "2026",
+    "description": "Part of China's push toward a domestic-chip AI computing grid (a reported $295B national plan to run 80% of capacity on Chinese silicon). Alibaba launched this Guangdong facility running on its own chips as Chinese firms commit over 500,000 combined Huawei Ascend chip orders for 2026.",
+    "sources": ["https://www.cnbc.com/2026/04/08/china-alibaba-data-center-ai-chips-zhenwu.html", "https://www.techtimes.com/articles/318868/20260622/china-ai-data-center-grid-locks-out-nvidia-295-billion-domestic-chip-mandate.htm"]
   }
 ]

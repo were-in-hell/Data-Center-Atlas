@@ -1,0 +1,15 @@
+{
+  "Google: Canelones Data Center": {
+    "summary": "Announced in 2023 amid Uruguay's worst drought in 74 years, the original design would have drawn ~7.6 million liters of drinking water a day for cooling — roughly the daily domestic use of 55,000 people — sparking nationwide protests. Google redesigned the facility to use air cooling instead of water before construction began.",
+    "links": [
+      {"title": "TechTimes: Uruguayans protest Google's water plan", "url": "https://www.techtimes.com/articles/293657/20230711/google-data-centre-plan-angers-drought-stricken-people-uruguay.htm"},
+      {"title": "Mongabay: The Cloud vs. drought in Latin America", "url": "https://news.mongabay.com/2023/11/the-cloud-vs-drought-water-hog-data-centers-threaten-latin-america-critics-say/"}
+    ]
+  },
+  "Google: Kronstorf Data Center": {
+    "summary": "Local groups (\"Da Huat brennt\", \"Solidarwerkstatt\", \"Parents for Future\", \"Guter Grund\") have held repeated protests over the project's electricity and water demands, its land footprint, and where the power supplying it will come from. Demonstrations were ongoing as of June 2026 while the facility is under construction.",
+    "links": [
+      {"title": "meinbezirk.at: Kritik am Google-Rechenzentrum Kronstorf", "url": "https://www.meinbezirk.at/linz-land/c-lokales/kritik-am-google-rechenzentrum-kronstorf_a8693973"}
+    ]
+  }
+}

@@ -89,6 +89,16 @@ select option{background:#0b0f1a}
 .cb.me{background:rgba(251,191,36,.12);color:var(--amber)}
 .cb.hi{background:rgba(0,255,136,.12);color:var(--green)}
 .snote{font-size:10px;color:var(--muted);line-height:1.5;margin-bottom:10px;padding:7px 9px;background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.15);border-radius:6px}
+/* ── Layer legends (open/close with their checkbox) ── */
+.layer-legend{display:none;margin-top:8px;padding:8px 9px;background:rgba(255,255,255,.03);border:1px solid var(--bdr);border-radius:6px}
+.layer-legend.open{display:block}
+.lg-sub{font-size:9px;color:var(--muted);line-height:1.4;margin-bottom:6px}
+.lg-row{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--text);line-height:1.4;margin-bottom:5px}
+.lg-row:last-child{margin-bottom:0}
+.lg-swatch{width:13px;height:13px;flex-shrink:0;border-radius:3px}
+.lg-line{width:18px;height:0;flex-shrink:0}
+.lg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.lg-diamond{width:8px;height:8px;flex-shrink:0;transform:rotate(45deg)}
 .rr{display:flex;align-items:center;gap:5px}
 .ri{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--bdr);border-radius:5px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 6px;outline:none;width:0;min-width:0}
 .ri:focus{border-color:var(--cyan)}
@@ -148,12 +158,22 @@ select option{background:#0b0f1a}
 .pyear span{color:var(--text)}
 .pevents{padding:0 14px 8px;border-top:1px solid var(--bdr);margin-top:4px}
 .pevents-title{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:.15em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;margin-top:8px}
+.pcontroversy{margin-top:9px;padding:9px 10px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.28);border-radius:7px}
+.pcontroversy-title{display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--red);margin-bottom:6px;font-weight:700}
+.pcontroversy-body{font-size:11px;color:var(--text);line-height:1.55;margin-bottom:7px}
+.pcontroversy-links{display:flex;flex-direction:column;gap:4px}
+.pcontroversy-links a{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--red);text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.pcontroversy-links a:hover{text-decoration:underline}
 .pevent{display:flex;gap:8px;font-size:10px;margin-bottom:5px;line-height:1.45}
 .pevent-date{font-family:'IBM Plex Mono',monospace;color:var(--muted);flex-shrink:0;min-width:56px}
 .pevent-stage{font-family:'IBM Plex Mono',monospace;font-size:9px;padding:1px 5px;border-radius:3px;flex-shrink:0}
 .pevent-stage.operational{background:rgba(0,255,136,.1);color:var(--green)}
 .pevent-stage.construction{background:rgba(251,191,36,.12);color:var(--amber)}
 .pevent-stage.announced{background:rgba(0,212,255,.08);color:var(--cyan)}
+
+/* ── Flagged (controversial) data center markers ── */
+.dc-flagged{animation:dcFlagPulse 1.8s ease-in-out infinite}
+@keyframes dcFlagPulse{0%,100%{stroke-opacity:1}50%{stroke-opacity:.35}}
 
 /* ── IXP markers (diamond — distinct from DC circles) ── */
 .ixp-marker{width:11px;height:11px;background:rgba(0,212,255,0.85);border:1px solid rgba(255,255,255,0.55);transform:rotate(45deg);box-shadow:0 0 5px rgba(0,212,255,0.6);cursor:pointer}
@@ -216,6 +236,7 @@ select option{background:#0b0f1a}
       <input type="checkbox" id="hyperscale-only"/> Hyperscale operators only
     </label>
     <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px" id="hyperscale-count">&#8212;</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--red);margin-top:4px;display:none" id="controversy-count"></div>
   </div>
   <hr class="pdiv"/>
   <div>
@@ -224,6 +245,10 @@ select option{background:#0b0f1a}
     </label>
     <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px" id="cables-count">&#8212;</div>
     <div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);margin-top:3px;opacity:.75">Routes shown schematically &middot; data: TeleGeography</div>
+    <div class="layer-legend" id="legend-cables">
+      <div class="lg-row"><div class="lg-line" style="border-top:2px solid #939597"></div>Cable route (colour = individual cable, for visual distinction)</div>
+      <div class="lg-row"><div class="lg-dot" style="background:#00d4ff;border:1px solid rgba(255,255,255,.5)"></div>Landing point</div>
+    </div>
   </div>
   <hr class="pdiv"/>
   <div>
@@ -231,12 +256,40 @@ select option{background:#0b0f1a}
       <input type="checkbox" id="power-toggle"/> Power grid
     </label>
     <div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);margin-top:3px;opacity:.75">Substations, transmission lines &amp; plants &middot; data: OpenStreetMap / Open Infrastructure Map</div>
+    <div class="layer-legend" id="legend-power">
+      <div class="lg-sub">Line colour = voltage tier</div>
+      <div class="lg-row"><div class="lg-swatch" style="background:#00C1CF"></div>&#8805;550 kV &middot; bulk interstate</div>
+      <div class="lg-row"><div class="lg-swatch" style="background:#B54EB2"></div>310&#8211;549 kV</div>
+      <div class="lg-row"><div class="lg-swatch" style="background:#C73030"></div>220&#8211;309 kV</div>
+      <div class="lg-row"><div class="lg-swatch" style="background:#B55D00"></div>132&#8211;219 kV</div>
+      <div class="lg-row"><div class="lg-swatch" style="background:#B59F10"></div>52&#8211;131 kV</div>
+      <div class="lg-row"><div class="lg-swatch" style="background:#55B555"></div>25&#8211;51 kV</div>
+      <div class="lg-row"><div class="lg-swatch" style="background:#6E97B8"></div>10&#8211;24 kV</div>
+      <div class="lg-row"><div class="lg-swatch" style="background:#7A7A85"></div>&lt;10 kV / unknown</div>
+      <div class="lg-row"><div class="lg-swatch" style="background:#caa46b;opacity:.6"></div>Power plant (filled area)</div>
+      <hr class="pdiv" style="margin:7px 0"/>
+      <div class="lg-sub">Importance filter &mdash; higher kV = fewer, more critical backbone lines, the kind that actually feed gigawatt-scale AI campuses</div>
+      <select id="power-voltage-filter" style="margin-top:5px">
+        <option value="0">Show all voltages</option>
+        <option value="52">&#8805;52 kV (sub-transmission and up)</option>
+        <option value="132">&#8805;132 kV (high voltage)</option>
+        <option value="220">&#8805;220 kV (extra-high voltage backbone)</option>
+        <option value="310">&#8805;310 kV (UHV / bulk transmission only)</option>
+      </select>
+      <label class="req" style="margin-top:8px">
+        <input type="checkbox" id="ai-catchment-toggle"/> Highlight grid catchment around AI clusters (40km)
+      </label>
+    </div>
   </div>
   <div style="margin-top:8px">
     <label class="req" style="margin-top:0;font-size:12px;color:var(--text);gap:7px">
       <input type="checkbox" id="telecom-toggle"/> Telecom / fiber backbone
     </label>
     <div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);margin-top:3px;opacity:.75">Fiber routes, exchanges &amp; towers &middot; same source</div>
+    <div class="layer-legend" id="legend-telecom">
+      <div class="lg-row"><div class="lg-line" style="border-top:2px dashed #a78bfa"></div>Fiber / communication line</div>
+      <div class="lg-row"><div class="lg-dot" style="background:#a78bfa;border:1px solid rgba(255,255,255,.5)"></div>Data center / exchange point</div>
+    </div>
   </div>
   <hr class="pdiv"/>
   <div>
@@ -244,6 +297,9 @@ select option{background:#0b0f1a}
       <input type="checkbox" id="ixp-toggle"/> Internet Exchange Points
     </label>
     <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px" id="ixp-count">&#8212;</div>
+    <div class="layer-legend" id="legend-ixp">
+      <div class="lg-row"><div class="lg-diamond" style="background:rgba(0,212,255,.85);border:1px solid rgba(255,255,255,.55)"></div>Internet Exchange Point &middot; size of dataset reflects participant networks, not facility size</div>
+    </div>
   </div>
   <hr class="pdiv"/>
   <div>
@@ -251,6 +307,10 @@ select option{background:#0b0f1a}
       <input type="checkbox" id="ai-toggle"/> AI compute clusters
     </label>
     <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px" id="ai-count">&#8212;</div>
+    <div class="layer-legend" id="legend-ai">
+      <div class="lg-row"><div class="ai-marker" style="position:static"><div class="core"></div></div>Announced AI GPU/TPU cluster &middot; hand-curated, see popups for sources</div>
+      <div class="lg-row"><div class="lg-dot" style="background:transparent;border:2.5px solid #f87171"></div>Pulsing red ring on a data-center dot = flagged controversy</div>
+    </div>
   </div>
   <hr class="pdiv"/>
   <div>
@@ -343,6 +403,16 @@ window.addEventListener('load', function () {
   const COLORS = {address:'#00ff88', city:'#fbbf24', country:'#f87171'};
   const tierColor = t => COLORS[t] || '#f87171';
 
+  function buildControversyBlock(c) {
+    if (!c || !c.summary) return '';
+    const links = (c.links || []).map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title||l.url)} <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`).join('');
+    return `<div class="pcontroversy">
+      <div class="pcontroversy-title">&#9888; Controversy</div>
+      <div class="pcontroversy-body">${esc(c.summary)}</div>
+      ${links ? `<div class="pcontroversy-links">${links}</div>` : ''}
+    </div>`;
+  }
+
   // ── Precision legend ──────────────────────────────────────────────────────
   function updateLegend() {
     const z = map.getZoom();
@@ -422,7 +492,7 @@ window.addEventListener('load', function () {
     return `${top}<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
       ${statusRow}
       <div class="ph"><div class="pn">${esc(d.name)}${badge}${hsBadge}</div><div class="pc">${esc(d.country)}</div></div>
-      <div class="pb">${addr}${chips?`<div class="pchips">${chips}</div>`:''}${desc}${eventsHtml}<div class="pacts">${dcLink}</div></div>`;
+      <div class="pb">${addr}${chips?`<div class="pchips">${chips}</div>`:''}${desc}${eventsHtml}${buildControversyBlock(d.controversy)}<div class="pacts">${dcLink}</div></div>`;
   }
 
   function buildCablePopup(p) {
@@ -456,9 +526,11 @@ window.addEventListener('load', function () {
   let countries = new Set(), countryCounts = {};
   let activeCountry = '', activeSearch = '', hyperscaleOnly = false;
 
-  fetch('datacenters.geojson')
-    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(geojson => {
+  Promise.all([
+    fetch('datacenters.geojson').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }),
+    fetch('controversies.json').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+  ])
+    .then(([geojson, controversies]) => {
       const feats = geojson.features || [];
       const tiers = {address:0, city:0, country:0};
 
@@ -467,27 +539,31 @@ window.addEventListener('load', function () {
         if (t in tiers) tiers[t]++;
         countries.add(p.country);
         countryCounts[p.country] = (countryCounts[p.country] || 0) + 1;
+        const controversy = controversies[p.name];
         return { lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0], ...p,
+                 controversy,
                  _sp:parseSqft(p['total space']), _co:parseSqft(p['colocation space']), _pw:parseMW(p['total power']) };
       });
 
       // Build all markers once
       allMarkers = allPoints.map(d => {
         const color = tierColor(d.tier);
+        const flagged = !!d.controversy;
         const m = L.circleMarker([d.lat, d.lng], {
-          radius: 6,
+          radius: flagged ? 8 : 6,
           fillColor: color,
-          color: 'rgba(255,255,255,0.22)',
-          weight: 1,
+          color: flagged ? '#f87171' : 'rgba(255,255,255,0.22)',
+          weight: flagged ? 2.5 : 1,
           fillOpacity: 0.87,
           pane: 'markerPane',
+          className: flagged ? 'dc-flagged' : '',
         });
         m.on('click', e => {
           L.DomEvent.stopPropagation(e);
           showPopup(buildPopup(d), e.originalEvent.clientX, e.originalEvent.clientY);
         });
         m.on('mouseover', e => {
-          ttEl.textContent   = d.name;
+          ttEl.textContent   = flagged ? ('⚠ ' + d.name + ' — controversial') : d.name;
           ttEl.style.left    = (e.originalEvent.clientX + 14) + 'px';
           ttEl.style.top     = (e.originalEvent.clientY - 32) + 'px';
           ttEl.style.display = 'block';
@@ -515,6 +591,14 @@ window.addEventListener('load', function () {
       hsEl.textContent = hsCount
         ? `${hsCount.toLocaleString()} identified (industry est. 1,360+ worldwide, Synergy Research Q4 2025)`
         : 'No hyperscale data yet — run tag_hyperscale.py';
+
+      // Controversy flags
+      const ctCount = allPoints.filter(d => d.controversy).length;
+      const ctEl = document.getElementById('controversy-count');
+      if (ctCount) {
+        ctEl.style.display = 'block';
+        ctEl.textContent = `⚠ ${ctCount.toLocaleString()} flagged controversial — pulsing red ring`;
+      }
 
       // Coverage badges
       const total = feats.length;
@@ -612,7 +696,10 @@ window.addEventListener('load', function () {
     });
   }
 
+  function toggleLegend(id, open) { document.getElementById(id).classList.toggle('open', open); }
+
   document.getElementById('cables-toggle').addEventListener('change', e => {
+    toggleLegend('legend-cables', e.target.checked);
     if (e.target.checked) {
       loadCables();
       map.addLayer(cableLayer);
@@ -633,16 +720,22 @@ window.addEventListener('load', function () {
   const OIM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &middot; <a href="https://openinframap.org">Open Infrastructure Map</a>';
   const hide = () => ({ weight: 0, opacity: 0, fillOpacity: 0, radius: 0 });
 
+  // Higher voltage = fewer, more critical backbone lines - the ones that
+  // actually carry the hundreds of MW a gigawatt-scale AI campus needs.
+  // minVoltageFilter lets the user collapse the map down to just that backbone.
+  let minVoltageFilter = 0;
+  const belowFilter = p => (parseFloat(p.voltage) || 0) < minVoltageFilter;
+
   const powerLayer = L.vectorGrid.protobuf('https://openinframap.org/map/power/{z}/{x}/{y}.pbf', {
     rendererFactory: L.canvas.tile,
     maxNativeZoom: 17,
     attribution: OIM_ATTR,
     interactive: true,
     vectorTileLayerStyles: {
-      power_line: (p, z) => ({ color: voltageColor(p.voltage), weight: Math.max(0.8, Math.min(3.2, (z - 3) * 0.35)), opacity: 0.8, dashArray: p.tunnel ? [2,3] : null }),
+      power_line: (p, z) => belowFilter(p) ? hide() : ({ color: voltageColor(p.voltage), weight: Math.max(0.8, Math.min(3.2, (z - 3) * 0.35)), opacity: 0.8, dashArray: p.tunnel ? [2,3] : null }),
       power_plant: () => ({ fill: true, fillColor: '#caa46b', fillOpacity: 0.18, color: '#caa46b', weight: 0.6, opacity: 0.45 }),
-      power_substation: (p) => ({ fill: true, fillColor: voltageColor(p.voltage), fillOpacity: 0.3, color: 'rgba(0,0,0,0.45)', weight: 0.6 }),
-      power_substation_point: (p, z) => ({ radius: z > 9 ? 3 : 1.6, fill: true, fillColor: voltageColor(p.voltage), fillOpacity: 0.9, color: 'rgba(255,255,255,0.5)', weight: 1 }),
+      power_substation: (p) => belowFilter(p) ? hide() : ({ fill: true, fillColor: voltageColor(p.voltage), fillOpacity: 0.3, color: 'rgba(0,0,0,0.45)', weight: 0.6 }),
+      power_substation_point: (p, z) => belowFilter(p) ? hide() : ({ radius: z > 9 ? 3 : 1.6, fill: true, fillColor: voltageColor(p.voltage), fillOpacity: 0.9, color: 'rgba(255,255,255,0.5)', weight: 1 }),
       power_generator: hide, power_generator_area: hide, power_tower: hide, power_transformer: hide,
       power_switch: hide, power_compensator: hide, power_portal_way: hide, power_plant_point: hide,
     },
@@ -676,10 +769,53 @@ window.addEventListener('load', function () {
   });
 
   document.getElementById('power-toggle').addEventListener('change', e => {
+    toggleLegend('legend-power', e.target.checked);
     if (e.target.checked) map.addLayer(powerLayer); else map.removeLayer(powerLayer);
   });
   document.getElementById('telecom-toggle').addEventListener('change', e => {
+    toggleLegend('legend-telecom', e.target.checked);
     if (e.target.checked) map.addLayer(telecomLayer); else map.removeLayer(telecomLayer);
+  });
+
+  document.getElementById('power-voltage-filter').addEventListener('change', e => {
+    minVoltageFilter = parseFloat(e.target.value) || 0;
+    if (map.hasLayer(powerLayer)) powerLayer.redraw();
+  });
+
+  // ── AI cluster grid catchment (40km halos — visual proxy for "which power
+  // lines matter here", since OSM line features don't carry a load/customer
+  // attribute we could rank by) ──────────────────────────────────────────────
+  const aiCatchmentLayer = L.layerGroup();
+  let aiCatchmentLoaded = false;
+  function loadAiCatchment() {
+    if (aiCatchmentLoaded) return;
+    aiCatchmentLoaded = true;
+    fetch('ai_clusters.json')
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(rows => {
+        rows.forEach(p => {
+          L.circle([p.lat, p.lon], {
+            radius: 40000,
+            color: '#fbbf24', weight: 1.4, opacity: 0.55, dashArray: [5, 4],
+            fill: true, fillColor: '#fbbf24', fillOpacity: 0.05,
+            interactive: false,
+          }).addTo(aiCatchmentLayer);
+        });
+      })
+      .catch(err => console.error(err));
+  }
+  document.getElementById('ai-catchment-toggle').addEventListener('change', e => {
+    if (e.target.checked) {
+      loadAiCatchment();
+      if (!map.hasLayer(powerLayer)) {
+        map.addLayer(powerLayer); // catchment is meaningless without the grid visible
+        document.getElementById('power-toggle').checked = true;
+        toggleLegend('legend-power', true);
+      }
+      map.addLayer(aiCatchmentLayer);
+    } else {
+      map.removeLayer(aiCatchmentLayer);
+    }
   });
 
   // ── Internet Exchange Points (Packet Clearing House directory) ─────────────
@@ -723,6 +859,7 @@ window.addEventListener('load', function () {
       });
   }
   document.getElementById('ixp-toggle').addEventListener('change', e => {
+    toggleLegend('legend-ixp', e.target.checked);
     if (e.target.checked) { loadIxp(); map.addLayer(ixpLayer); } else { map.removeLayer(ixpLayer); }
   });
 
@@ -741,6 +878,7 @@ window.addEventListener('load', function () {
       <div class="pb">
         ${chips ? `<div class="pchips">${chips}</div>` : ''}
         ${p.description ? `<div class="pdesc" style="-webkit-line-clamp:6">${esc(p.description)}</div>` : ''}
+        ${buildControversyBlock(p.controversy)}
         <div class="pacts">${sources}</div>
       </div>`;
   }
@@ -769,6 +907,7 @@ window.addEventListener('load', function () {
       });
   }
   document.getElementById('ai-toggle').addEventListener('change', e => {
+    toggleLegend('legend-ai', e.target.checked);
     if (e.target.checked) { loadAi(); map.addLayer(aiLayer); } else { map.removeLayer(aiLayer); }
   });
 
