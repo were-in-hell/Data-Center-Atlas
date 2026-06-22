@@ -155,6 +155,16 @@ select option{background:#0b0f1a}
 .pevent-stage.construction{background:rgba(251,191,36,.12);color:var(--amber)}
 .pevent-stage.announced{background:rgba(0,212,255,.08);color:var(--cyan)}
 
+/* ── IXP markers (diamond — distinct from DC circles) ── */
+.ixp-marker{width:11px;height:11px;background:rgba(0,212,255,0.85);border:1px solid rgba(255,255,255,0.55);transform:rotate(45deg);box-shadow:0 0 5px rgba(0,212,255,0.6);cursor:pointer}
+.ixp-marker:hover{background:#fff}
+
+/* ── AI compute cluster markers (square + glow — the flagship layer) ── */
+.ai-marker{width:16px;height:16px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ai-marker .core{width:100%;height:100%;background:rgba(167,139,250,0.85);border:1.5px solid #fff;border-radius:3px;box-shadow:0 0 10px rgba(167,139,250,0.9),0 0 2px rgba(255,255,255,0.8);animation:aiPulse 2.4s ease-in-out infinite}
+@keyframes aiPulse{0%,100%{box-shadow:0 0 8px rgba(167,139,250,0.8),0 0 2px rgba(255,255,255,0.7)}50%{box-shadow:0 0 16px rgba(167,139,250,1),0 0 4px rgba(255,255,255,0.9)}}
+.ai-chip{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9px;background:rgba(167,139,250,.14);border:1px solid rgba(167,139,250,.3);border-radius:4px;padding:2px 6px;color:#a78bfa;margin-right:5px}
+
 /* ── Tooltip ── */
 #tooltip{position:fixed;z-index:1900;display:none;pointer-events:none;background:rgba(11,15,26,.95);border:1px solid var(--bdr);border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text);padding:5px 9px;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;backdrop-filter:blur(8px)}
 
@@ -217,6 +227,33 @@ select option{background:#0b0f1a}
   </div>
   <hr class="pdiv"/>
   <div>
+    <label class="req" style="margin-top:0;font-size:12px;color:var(--text);gap:7px">
+      <input type="checkbox" id="power-toggle"/> Power grid
+    </label>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);margin-top:3px;opacity:.75">Substations, transmission lines &amp; plants &middot; data: OpenStreetMap / Open Infrastructure Map</div>
+  </div>
+  <div style="margin-top:8px">
+    <label class="req" style="margin-top:0;font-size:12px;color:var(--text);gap:7px">
+      <input type="checkbox" id="telecom-toggle"/> Telecom / fiber backbone
+    </label>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);margin-top:3px;opacity:.75">Fiber routes, exchanges &amp; towers &middot; same source</div>
+  </div>
+  <hr class="pdiv"/>
+  <div>
+    <label class="req" style="margin-top:0;font-size:12px;color:var(--text);gap:7px">
+      <input type="checkbox" id="ixp-toggle"/> Internet Exchange Points
+    </label>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px" id="ixp-count">&#8212;</div>
+  </div>
+  <hr class="pdiv"/>
+  <div>
+    <label class="req" style="margin-top:0;font-size:12px;color:var(--text);gap:7px">
+      <input type="checkbox" id="ai-toggle"/> AI compute clusters
+    </label>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px" id="ai-count">&#8212;</div>
+  </div>
+  <hr class="pdiv"/>
+  <div>
     <button id="spec-toggle"><span class="arrow">&#9658;</span> Filter by specs</button>
     <div id="spec-panel"><br/>
       <div class="snote">&#9888; Not all data centers report every stat.</div>
@@ -237,6 +274,7 @@ select option{background:#0b0f1a}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.min.js"></script>
 <script>
 window.addEventListener('load', function () {
 
@@ -388,17 +426,10 @@ window.addEventListener('load', function () {
   }
 
   function buildCablePopup(p) {
-    const tgUrl = `https://www.submarinecablemap.com/submarine-cable/${encodeURIComponent(p.id)}`;
-    let rows = '';
-    if (p.rfs)                     rows += `<div class="pr"><div class="prl">RFS</div><div class="prv">${esc(p.rfs)}</div></div>`;
-    if (p.length_km != null)       rows += `<div class="pr"><div class="prl">Length</div><div class="prv">${Math.round(p.length_km).toLocaleString()} km</div></div>`;
-    if (p.owners && p.owners.length)       rows += `<div class="pr"><div class="prl">Owners</div><div class="prv">${esc(p.owners.join(', '))}</div></div>`;
-    if (p.suppliers && p.suppliers.length) rows += `<div class="pr"><div class="prl">Suppliers</div><div class="prv">${esc(p.suppliers.join(', '))}</div></div>`;
-    const notesNote = p.has_notes ? `<div class="pdesc">Additional notes available on the source page.</div>` : '';
-    const officialLink = p.url ? `<a class="plink" href="${esc(p.url)}" target="_blank" rel="noopener">Official site <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>` : '';
+    const url = `https://www.submarinecablemap.com/submarine-cable/${encodeURIComponent(p.id)}`;
     return `<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
       <div class="ph"><div class="pn">${esc(p.name)}</div><div class="pc">Submarine cable</div></div>
-      <div class="pb">${rows}${notesNote}<div class="pacts"><a class="plink" href="${esc(tgUrl)}" target="_blank" rel="noopener">Cable details <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>${officialLink}</div></div>`;
+      <div class="pb"><div class="pacts"><a class="plink" href="${esc(url)}" target="_blank" rel="noopener">Cable details <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
   }
 
   function buildLandingPopup(p) {
@@ -517,11 +548,7 @@ window.addEventListener('load', function () {
     Promise.all([
       fetch('cable-geo.json').then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); }),
       fetch('landing-point-geo.json').then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); }),
-      // Optional enrichment file (rfs/length/owners/suppliers/url/has_notes) - keyed by cable id.
-      // Tolerant of 404/missing/malformed: falls back to {} so the basic cable map still works
-      // even before this file exists or if it's ever absent.
-      fetch('cable_details.json').then(r => r.ok ? r.json() : {}).catch(() => ({})),
-    ]).then(([cableGeo, landingGeo, cableDetails]) => {
+    ]).then(([cableGeo, landingGeo]) => {
       // worldCopyJump lets the map pan infinitely east/west into repeated
       // copies of the world, but a layer only exists once at its original
       // coordinates - so cables/landing points "ran out" right at the edge
@@ -532,17 +559,9 @@ window.addEventListener('load', function () {
       const WORLD_OFFSETS = [-360, 0, 360];
 
       cableGeo.features.forEach(f => {
-        // Merge in the enrichment record (if any) for this cable id. Spread order
-        // matters: geo properties first (id/name/color/feature_id), then details
-        // on top, so a detail record's own id/name (which should always agree)
-        // don't drop the geo-only `color` field needed for line styling.
-        const p = { ...f.properties, ...(cableDetails[f.properties.id] || {}) };
+        const p = f.properties;
         const baseLatLngs = f.geometry.coordinates.map(line => line.map(([lng, lat]) => [lat, lng]));
         const baseStyle = { color: p.color || '#939597', weight: 1.6, opacity: 0.7 };
-        const hoverStyle = { weight: 3.2, opacity: 1 };
-        // All 3 longitude copies of this cable need to highlight together, not
-        // just whichever one the mouse happens to be over.
-        const siblingLines = [];
         WORLD_OFFSETS.forEach(offset => {
           const latlngs = baseLatLngs.map(line => line.map(([lat, lng]) => [lat, lng + offset]));
           const line = L.polyline(latlngs, baseStyle);
@@ -550,12 +569,9 @@ window.addEventListener('load', function () {
             L.DomEvent.stopPropagation(e);
             showPopup(buildCablePopup(p), e.originalEvent.clientX, e.originalEvent.clientY);
           });
-          siblingLines.push(line);
+          line.on('mouseover', () => line.setStyle({ weight: 3.2, opacity: 1 }));
+          line.on('mouseout',  () => line.setStyle(baseStyle));
           cableLayer.addLayer(line);
-        });
-        siblingLines.forEach(line => {
-          line.on('mouseover', () => siblingLines.forEach(l => l.setStyle(hoverStyle)));
-          line.on('mouseout',  () => siblingLines.forEach(l => l.setStyle(baseStyle)));
         });
       });
       cableCount = cableGeo.features.length;
@@ -603,6 +619,157 @@ window.addEventListener('load', function () {
     } else {
       map.removeLayer(cableLayer);
     }
+  });
+
+  // ── Power grid & telecom backbone (live vector tiles, Open Infrastructure Map) ─
+  // Voltage colour scale matches openinframap.org's own convention so the
+  // overlay reads consistently if anyone cross-references the source.
+  const VOLTAGE_STEPS = [[550,'#00C1CF'],[310,'#B54EB2'],[220,'#C73030'],[132,'#B55D00'],[52,'#B59F10'],[25,'#55B555'],[10,'#6E97B8']];
+  function voltageColor(v) {
+    v = parseFloat(v) || 0;
+    for (const [kv, color] of VOLTAGE_STEPS) if (v >= kv) return color;
+    return '#7A7A85';
+  }
+  const OIM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &middot; <a href="https://openinframap.org">Open Infrastructure Map</a>';
+  const hide = () => ({ weight: 0, opacity: 0, fillOpacity: 0, radius: 0 });
+
+  const powerLayer = L.vectorGrid.protobuf('https://openinframap.org/map/power/{z}/{x}/{y}.pbf', {
+    rendererFactory: L.canvas.tile,
+    maxNativeZoom: 17,
+    attribution: OIM_ATTR,
+    interactive: true,
+    vectorTileLayerStyles: {
+      power_line: (p, z) => ({ color: voltageColor(p.voltage), weight: Math.max(0.8, Math.min(3.2, (z - 3) * 0.35)), opacity: 0.8, dashArray: p.tunnel ? [2,3] : null }),
+      power_plant: () => ({ fill: true, fillColor: '#caa46b', fillOpacity: 0.18, color: '#caa46b', weight: 0.6, opacity: 0.45 }),
+      power_substation: (p) => ({ fill: true, fillColor: voltageColor(p.voltage), fillOpacity: 0.3, color: 'rgba(0,0,0,0.45)', weight: 0.6 }),
+      power_substation_point: (p, z) => ({ radius: z > 9 ? 3 : 1.6, fill: true, fillColor: voltageColor(p.voltage), fillOpacity: 0.9, color: 'rgba(255,255,255,0.5)', weight: 1 }),
+      power_generator: hide, power_generator_area: hide, power_tower: hide, power_transformer: hide,
+      power_switch: hide, power_compensator: hide, power_portal_way: hide, power_plant_point: hide,
+    },
+  });
+
+  const telecomLayer = L.vectorGrid.protobuf('https://openinframap.org/map/telecoms/{z}/{x}/{y}.pbf', {
+    rendererFactory: L.canvas.tile,
+    maxNativeZoom: 17,
+    attribution: OIM_ATTR,
+    interactive: true,
+    vectorTileLayerStyles: {
+      telecoms_communication_line: (p, z) => ({ color: '#a78bfa', weight: z > 9 ? 1.5 : 0.7, opacity: 0.62, dashArray: [3, 2] }),
+      telecoms_data_center: () => ({ fill: true, fillColor: '#a78bfa', fillOpacity: 0.16, color: '#a78bfa', weight: 0.6, opacity: 0.45 }),
+      telecoms_data_center_point: (p, z) => ({ radius: z > 9 ? 3 : 1.6, fill: true, fillColor: '#a78bfa', fillOpacity: 0.9, color: 'rgba(255,255,255,0.5)', weight: 1 }),
+      telecoms_mast: hide, telecoms_cabinet: hide,
+    },
+  });
+
+  function vgPopup(title, p) {
+    const rows = Object.entries(p).filter(([k,v]) => v != null && v !== '' && !['id'].includes(k)).slice(0,8)
+      .map(([k,v]) => `<div class="pr"><div class="prl">${esc(k).toUpperCase()}</div><div class="prv">${esc(v)}</div></div>`).join('');
+    return `<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
+      <div class="ph"><div class="pn">${esc(title)}</div></div><div class="pb">${rows}</div>`;
+  }
+  [powerLayer, telecomLayer].forEach(layer => {
+    layer.on('click', e => {
+      L.DomEvent.stopPropagation(e);
+      const p = e.layer.properties || {};
+      showPopup(vgPopup(p.name || p.ref || e.layerName.replace(/_/g,' '), p), e.originalEvent.clientX, e.originalEvent.clientY);
+    });
+  });
+
+  document.getElementById('power-toggle').addEventListener('change', e => {
+    if (e.target.checked) map.addLayer(powerLayer); else map.removeLayer(powerLayer);
+  });
+  document.getElementById('telecom-toggle').addEventListener('change', e => {
+    if (e.target.checked) map.addLayer(telecomLayer); else map.removeLayer(telecomLayer);
+  });
+
+  // ── Internet Exchange Points (Packet Clearing House directory) ─────────────
+  const ixpLayer = L.layerGroup();
+  const ixpIcon = L.divIcon({ className: '', html: '<div class="ixp-marker"></div>', iconSize: [11,11], iconAnchor: [5.5,5.5] });
+  let ixpLoaded = false;
+
+  function buildIxpPopup(p) {
+    const url = p.url ? `<a class="plink" href="${esc(p.url)}" target="_blank" rel="noopener">Exchange site <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>` : '';
+    const pchUrl = `https://www.pch.net/ixp/dir`;
+    return `<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
+      <div class="ph"><div class="pn">${esc(p.name)}</div><div class="pc">${esc(p.city)}, ${esc(p.country)} &middot; Internet Exchange Point</div></div>
+      <div class="pb">
+        <div class="pr"><div class="prl">PARTICIPANTS</div><div class="prv">${p.participants ? p.participants.toLocaleString() : 'n/a'} networks</div></div>
+        ${p.established && p.established!=='0' ? `<div class="pr"><div class="prl">ESTABLISHED</div><div class="prv">${esc(String(p.established).slice(0,4))}</div></div>` : ''}
+        <div class="pacts">${url}<a class="plink" href="${pchUrl}" target="_blank" rel="noopener">PCH directory <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div>
+      </div>`;
+  }
+
+  function loadIxp() {
+    if (ixpLoaded) return;
+    ixpLoaded = true;
+    fetch('ixp.json')
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(rows => {
+        rows.forEach(p => {
+          const m = L.marker([p.lat, p.lon], { icon: ixpIcon });
+          m.on('click', e => { L.DomEvent.stopPropagation(e); showPopup(buildIxpPopup(p), e.originalEvent.clientX, e.originalEvent.clientY); });
+          m.on('mouseover', e => {
+            ttEl.textContent = p.name; ttEl.style.left = (e.originalEvent.clientX+14)+'px'; ttEl.style.top = (e.originalEvent.clientY-32)+'px'; ttEl.style.display = 'block';
+          });
+          m.on('mousemove', e => { ttEl.style.left = (e.originalEvent.clientX+14)+'px'; ttEl.style.top = (e.originalEvent.clientY-32)+'px'; });
+          m.on('mouseout', () => { ttEl.style.display = 'none'; });
+          ixpLayer.addLayer(m);
+        });
+        document.getElementById('ixp-count').textContent = rows.length.toLocaleString() + ' exchanges (PCH, partial coverage — see fetch_ixp.py)';
+      })
+      .catch(err => {
+        document.getElementById('ixp-count').textContent = 'Could not load IXP data';
+        console.error(err);
+      });
+  }
+  document.getElementById('ixp-toggle').addEventListener('change', e => {
+    if (e.target.checked) { loadIxp(); map.addLayer(ixpLayer); } else { map.removeLayer(ixpLayer); }
+  });
+
+  // ── AI compute clusters (hand-curated — see ai_clusters.json) ───────────────
+  const aiLayer = L.layerGroup();
+  const aiIcon = L.divIcon({ className: '', html: '<div class="ai-marker"><div class="core"></div></div>', iconSize: [16,16], iconAnchor: [8,8] });
+  let aiLoaded = false;
+
+  function buildAiPopup(p) {
+    const chips = [p.operator, p.gpu_type, p.scale].filter(Boolean).map(c => `<span class="ai-chip">${esc(c)}</span>`).join('');
+    const statusBadge = p.status ? `<span class="status-badge ${String(p.status).toLowerCase().replace(/[^a-z]/g,'').replace('underconstruction','construction')}">${esc(p.status)}</span>` : '';
+    const sources = (p.sources || []).map((s,i) => `<a class="plink" href="${esc(s)}" target="_blank" rel="noopener">Source ${i+1} <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`).join('');
+    return `<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
+      ${statusBadge ? `<div class="pstatus">${statusBadge}${p.announced ? `<span class="pyear">Announced <span>${esc(p.announced)}</span></span>` : ''}</div>` : ''}
+      <div class="ph"><div class="pn">${esc(p.name)}</div><div class="pc">${esc(p.city)}, ${esc(p.country)} &middot; AI compute cluster</div></div>
+      <div class="pb">
+        ${chips ? `<div class="pchips">${chips}</div>` : ''}
+        ${p.description ? `<div class="pdesc" style="-webkit-line-clamp:6">${esc(p.description)}</div>` : ''}
+        <div class="pacts">${sources}</div>
+      </div>`;
+  }
+
+  function loadAi() {
+    if (aiLoaded) return;
+    aiLoaded = true;
+    fetch('ai_clusters.json')
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(rows => {
+        rows.forEach(p => {
+          const m = L.marker([p.lat, p.lon], { icon: aiIcon });
+          m.on('click', e => { L.DomEvent.stopPropagation(e); showPopup(buildAiPopup(p), e.originalEvent.clientX, e.originalEvent.clientY); });
+          m.on('mouseover', e => {
+            ttEl.textContent = p.name; ttEl.style.left = (e.originalEvent.clientX+14)+'px'; ttEl.style.top = (e.originalEvent.clientY-32)+'px'; ttEl.style.display = 'block';
+          });
+          m.on('mousemove', e => { ttEl.style.left = (e.originalEvent.clientX+14)+'px'; ttEl.style.top = (e.originalEvent.clientY-32)+'px'; });
+          m.on('mouseout', () => { ttEl.style.display = 'none'; });
+          aiLayer.addLayer(m);
+        });
+        document.getElementById('ai-count').textContent = rows.length.toLocaleString() + ' announced clusters (hand-curated)';
+      })
+      .catch(err => {
+        document.getElementById('ai-count').textContent = 'Could not load AI cluster data';
+        console.error(err);
+      });
+  }
+  document.getElementById('ai-toggle').addEventListener('change', e => {
+    if (e.target.checked) { loadAi(); map.addLayer(aiLayer); } else { map.removeLayer(aiLayer); }
   });
 
   // ── Panel minimize / reopen ─────────────────────────────────────────────────
