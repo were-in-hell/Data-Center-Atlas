@@ -931,7 +931,9 @@ window.addEventListener('load', function () {
   document.getElementById('dc-density-filter').addEventListener('input', e => {
     dcDensityThreshold = parseInt(e.target.value, 10) || 0;
     document.getElementById('dc-density-readout').textContent = dcDensityThreshold === 0 ? 'Off' : ('≥' + dcDensityThreshold);
-    reprocessAllLoadedPowerFeatures({});
+    // recomputeDistance:true ensures stale zero-counts (computed before the DC
+    // dataset finished loading) are replaced with correct values on first use.
+    reprocessAllLoadedPowerFeatures({ recomputeDistance: true });
   });
   document.getElementById('ai-catchment-toggle').addEventListener('change', e => {
     aiCatchmentVisible = e.target.checked;
@@ -1049,10 +1051,16 @@ window.addEventListener('load', function () {
   }
   function processPowerFeature(layer, opts) {
     try {
+      // Capture the original style only once — on the very first encounter,
+      // when the VectorGrid-applied style is still intact and unhidden.
+      // Never re-snapshot on recomputes: the layer may already be hidden,
+      // which would make the snapshot useless for restoring it later.
+      if (layer._dcCount == null) {
+        layer._origStyleSnapshot = Object.assign({}, layer.options);
+      }
       if (layer._dcCount == null || (opts && opts.recomputeDistance)) {
         const pt = getFeatureRepresentativePoint(layer);
         layer._dcCount = pt ? countDcNear(pt.lat, pt.lng, aiRadiusKm) : 0;
-        layer._origStyleSnapshot = Object.assign({}, layer.options);
       }
       applyDensityVisibility(layer);
     } catch (err) { /* defensive - never let this break the map */ }
