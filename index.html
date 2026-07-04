@@ -941,9 +941,9 @@ window.addEventListener('load', function () {
   document.getElementById('dc-density-filter').addEventListener('input', e => {
     dcDensityThreshold = parseInt(e.target.value, 10) || 0;
     document.getElementById('dc-density-readout').textContent = dcDensityThreshold === 0 ? 'Off' : ('≥' + dcDensityThreshold);
-    // recomputeDistance:true ensures stale zero-counts (computed before the DC
-    // dataset finished loading) are replaced with correct values on first use.
-    reprocessAllLoadedPowerFeatures({ recomputeDistance: true });
+    // _dcCount is already cached on every feature from the initial load —
+    // just re-apply visibility against the new threshold, no recomputation.
+    reprocessAllLoadedPowerFeatures();
   });
   document.getElementById('ai-catchment-toggle').addEventListener('change', e => {
     aiCatchmentVisible = e.target.checked;
