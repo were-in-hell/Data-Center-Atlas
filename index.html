@@ -309,7 +309,7 @@ select option{background:#0b0f1a}
       </label>
       <div class="lg-sub" style="margin-top:5px">Turning this on also switches the filter above to &#8805;220 kV, so only backbone-tier lines are left on the map &mdash; far less to wade through, and what's left is plausibly relevant to a gigawatt campus.</div>
       <hr class="pdiv" style="margin:7px 0"/>
-      <div class="lg-sub">Data-center density filter &mdash; hides lines, substations and plants with fewer than the selected number of data centers (any kind, full ~10.5k-record dataset, not just AI) within the proximity radius above. Geographic closeness only &mdash; not a wiring diagram.</div>
+      <div class="lg-sub">Data-center density filter &mdash; hides lines, substations and plants with fewer than the selected number of data centers (any kind, full ~10.5k-record dataset, not just AI) within the proximity radius above. Geographic closeness only &mdash; not a wiring diagram. <span style="color:var(--cyan)">Accuracy improves at higher zoom</span> &mdash; at world/country scale each map tile spans hundreds of km so a rural line sharing a tile with an urban cluster can appear to pass the filter. Run <code style="font-size:9px">precompute_power_buckets.py</code> once to generate a precomputed lookup that fixes this.</div>
       <div class="dc-btns" id="dc-density-btns">
         <button class="dc-btn" data-val="0" data-max="0">No DCs</button>
         <button class="dc-btn active" data-val="0">All</button>
@@ -594,13 +594,50 @@ window.addEventListener('load', function () {
       const feats = geojson.features || [];
       const tiers = {address:0, city:0, country:0};
 
+      // Hyperscale keyword detection — fired against DC name because the GeoJSON
+      // has no operator field. Covers both cloud hyperscalers (AWS, Google, Azure,
+      // Meta, Oracle…) and the large AI-compute providers (CoreWeave, Lambda, etc).
+      // Colo giants (Equinix, Digital Realty) are intentionally excluded: they host
+      // other companies' hardware and aren't themselves hyperscale cloud operators.
+      const HS_KEYWORDS = [
+        'amazon','aws',
+        'google','alphabet',
+        'microsoft','azure',
+        'meta ','facebook',
+        'apple inc','apple data',
+        'oracle cloud','oracle:',
+        'alibaba','aliyun',
+        'tencent',
+        'baidu',
+        'bytedance','tiktok',
+        'nvidia',
+        'coreweave',
+        'lambda labs',
+        'openai',
+        'ibm cloud',
+        'salesforce',
+        'huawei cloud',
+      ];
+      function detectHyperscale(name) {
+        const nl = (name || '').toLowerCase();
+        for (const kw of HS_KEYWORDS) { if (nl.includes(kw)) return kw; }
+        return null;
+      }
+
       allPoints = feats.map(f => {
         const p = f.properties, t = p.tier || 'country';
         if (t in tiers) tiers[t]++;
         countries.add(p.country);
         countryCounts[p.country] = (countryCounts[p.country] || 0) + 1;
         const controversy = controversies[p.name];
+        // If the GeoJSON already has is_hyperscale (from merge pipeline), use it;
+        // otherwise fall back to name-based detection so the filter always works.
+        const hsKw = detectHyperscale(p.name);
+        const isHs = p.is_hyperscale === true || !!hsKw;
+        const hsOp = p.hyperscale_operator || (hsKw ? hsKw.trim().replace(/^(amazon|aws)$/,'Amazon AWS').replace(/^(meta )$/,'Meta').replace(/^(microsoft|azure)$/,'Microsoft Azure') : null);
         return { lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0], ...p,
+                 is_hyperscale: isHs,
+                 hyperscale_operator: hsOp,
                  controversy,
                  _sp:parseSqft(p['total space']), _co:parseSqft(p['colocation space']), _pw:parseMW(p['total power']) };
       });
@@ -1207,10 +1244,24 @@ window.addEventListener('load', function () {
         if (precomputed !== null) {
           layer._dcCount = precomputed;
         } else {
-          // Fall back to tile approximation (lazy getter or plain number).
-          layer._dcCount = typeof dcCountOrGetter === 'function'
-            ? dcCountOrGetter()
-            : (dcCountOrGetter ?? 0);
+          // For point features (substations, power plants) getLatLng() returns the
+          // exact geographic centre — use it for a precise per-feature count.
+          // For line features VectorGrid's LineSymbolizer initialises _latlngs with []
+          // so getLatLngs() always returns empty; those fall back to the tile-centre
+          // approximation below.  Running precompute_power_buckets.py and committing
+          // power_dc_buckets.json is the only way to get per-line accuracy.
+          const pt = getFeatureRepresentativePoint(layer);
+          if (pt && Math.abs(pt.lat) <= 85 && Math.abs(pt.lng) <= 180) {
+            layer._dcCount = countDcNear(pt.lat, pt.lng, aiRadiusKm);
+          } else {
+            // Tile-centre approximation: same count for every feature in the tile.
+            // Inaccurate at low zoom (large tiles) because Math.max of 5 sample
+            // points means any tile that partially overlaps a DC cluster classifies
+            // ALL its features — including rural edge features — as high-density.
+            layer._dcCount = typeof dcCountOrGetter === 'function'
+              ? dcCountOrGetter()
+              : (dcCountOrGetter ?? 0);
+          }
         }
       }
       // Assign CSS bucket class — filter CSS rule applies automatically, no setStyle needed.
