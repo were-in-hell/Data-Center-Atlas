@@ -1,0 +1,167 @@
+[
+  {
+    "name": "Data Center Alley",
+    "region": "Ashburn / Northern Virginia, USA",
+    "lat": 39.043,
+    "lng": -77.487,
+    "capacity_mw": 4900,
+    "dc_count_approx": 300,
+    "headline": "World's largest data center concentration",
+    "notes": "An estimated 70% of global internet traffic passes through this corridor daily. Home to the world's densest fiber network and major IXPs including Equinix Ashburn. Loudoun County alone collects ~$600 million/year in data center tax revenue.",
+    "url": "https://en.wikipedia.org/wiki/Dulles_Technology_Corridor"
+  },
+  {
+    "name": "Dallas–Fort Worth Hub",
+    "region": "Dallas / Fort Worth, Texas, USA",
+    "lat": 32.900,
+    "lng": -97.040,
+    "capacity_mw": 1650,
+    "dc_count_approx": 150,
+    "headline": "Central US hyperscale corridor",
+    "notes": "Capacity tripled from 710 MW (2020) to 1,650 MW by mid-2024. Strategically positioned between Northern Virginia and Silicon Valley, with major campuses from Microsoft, Google, and AWS.",
+    "url": "https://dgtlinfra.com/data-centers-dallas-fort-worth/"
+  },
+  {
+    "name": "Phoenix Metro Cluster",
+    "region": "Phoenix / Mesa / Goodyear, Arizona, USA",
+    "lat": 33.450,
+    "lng": -112.074,
+    "capacity_mw": 1380,
+    "dc_count_approx": 130,
+    "headline": "Fastest-growing US data center market",
+    "notes": "Now the largest primary market in North America ahead of Silicon Valley. Attractive for its cheap power, dry desert climate (low cooling cost), and land availability. Home to major Meta and Microsoft campuses.",
+    "url": "https://dgtlinfra.com/data-centers-phoenix-arizona/"
+  },
+  {
+    "name": "Atlanta Cluster",
+    "region": "Atlanta, Georgia, USA",
+    "lat": 33.749,
+    "lng": -84.388,
+    "capacity_mw": 1459,
+    "dc_count_approx": 148,
+    "headline": "Southeastern US internet hub and second-largest US market",
+    "notes": "Home to one of the world's largest internet exchange points (Equinix Atlanta). Projected to reach 3,125 MW by 2030. Key data center corridor runs through the Midtown and Buckhead districts.",
+    "url": "https://dgtlinfra.com/data-centers-atlanta-georgia/"
+  },
+  {
+    "name": "Chicago Hub",
+    "region": "Chicago, Illinois, USA",
+    "lat": 41.878,
+    "lng": -87.629,
+    "capacity_mw": 1120,
+    "dc_count_approx": 130,
+    "headline": "Midwest internet backbone hub",
+    "notes": "Major financial exchange infrastructure (CME, CBOE) demands ultra-low latency, making Chicago a uniquely dense hub. Anchored by Equinix Chicago campus and QTS Data Centers. Key node for cross-country fiber routes.",
+    "url": "https://dgtlinfra.com/data-centers-chicago-illinois/"
+  },
+  {
+    "name": "Silicon Valley Cluster",
+    "region": "Santa Clara / San Jose, California, USA",
+    "lat": 37.354,
+    "lng": -121.955,
+    "capacity_mw": 900,
+    "dc_count_approx": 120,
+    "headline": "Original internet hub and hyperscaler HQ corridor",
+    "notes": "Where the commercial internet was born. Dense concentration of hyperscaler HQs, semiconductor fabs, and the region's tech workforce. Power constraints and high land costs have slowed growth relative to Phoenix and Texas.",
+    "url": "https://dgtlinfra.com/data-centers-silicon-valley/"
+  },
+  {
+    "name": "Columbus / New Albany Cluster",
+    "region": "Columbus / New Albany, Ohio, USA",
+    "lat": 40.056,
+    "lng": -82.790,
+    "capacity_mw": 1000,
+    "dc_count_approx": 40,
+    "headline": "Emerging gigawatt-scale AI supercluster",
+    "notes": "Home to Meta's Project Prometheus — one of the world's first 1 GW AI computing facilities, operational September 2025. The New Albany campus has expanded into what is billed as the largest AI supercomputer on Earth. Major investment from Microsoft and Google also underway.",
+    "url": "https://en.wikipedia.org/wiki/Meta_AI"
+  },
+  {
+    "name": "Frankfurt Cluster",
+    "region": "Frankfurt, Germany",
+    "lat": 50.110,
+    "lng": 8.682,
+    "capacity_mw": 1200,
+    "dc_count_approx": 100,
+    "headline": "Europe's largest internet exchange hub",
+    "notes": "Home to DE-CIX, the world's largest internet exchange point by traffic volume. Europe's financial center demands ultra-low latency infrastructure. Major hyperscaler and cloud presence from AWS, Google, Microsoft, and Equinix.",
+    "url": "https://en.wikipedia.org/wiki/DE-CIX"
+  },
+  {
+    "name": "London Cluster",
+    "region": "London (Slough / Docklands), UK",
+    "lat": 51.512,
+    "lng": -0.560,
+    "capacity_mw": 1500,
+    "dc_count_approx": 200,
+    "headline": "Europe's largest data center market",
+    "notes": "The Slough Trading Estate west of London and the Docklands area (Canary Wharf) form Europe's densest DC corridor. LINX (London Internet Exchange) is one of the world's busiest IXPs. Major hub for transatlantic internet traffic.",
+    "url": "https://dgtlinfra.com/data-centers-london/"
+  },
+  {
+    "name": "Amsterdam Cluster",
+    "region": "Amsterdam, Netherlands",
+    "lat": 52.374,
+    "lng": 4.890,
+    "capacity_mw": 700,
+    "dc_count_approx": 70,
+    "headline": "Home of AMS-IX, one of the world's largest internet exchanges",
+    "notes": "AMS-IX (Amsterdam Internet Exchange) handles over 10 Tbit/s of traffic. The Netherlands' location at the mouth of the Rhine makes it Europe's primary fiber landing point for transatlantic cables. Amsterdam's Zuidoost district is the core of the cluster.",
+    "url": "https://en.wikipedia.org/wiki/Amsterdam_Internet_Exchange"
+  },
+  {
+    "name": "Paris Cluster",
+    "region": "Paris, France",
+    "lat": 48.856,
+    "lng": 2.352,
+    "capacity_mw": 600,
+    "dc_count_approx": 80,
+    "headline": "Major European DC hub",
+    "notes": "Part of the FLAP-D group (Frankfurt, London, Amsterdam, Paris, Dublin) that dominates European data center capacity. Growing rapidly with major hyperscaler investment driven by EU data sovereignty regulations.",
+    "url": "https://dgtlinfra.com/data-centers-paris-france/"
+  },
+  {
+    "name": "Dublin Cluster",
+    "region": "Dublin, Ireland",
+    "lat": 53.350,
+    "lng": -6.260,
+    "capacity_mw": 800,
+    "dc_count_approx": 70,
+    "headline": "EU cloud gateway — European HQ for AWS, Google, Meta",
+    "notes": "Ireland's low corporate tax rate and EU membership made Dublin the European headquarters for most major US tech firms. Faces severe power grid constraints — Ireland's grid operator has imposed a moratorium on new DC connections in the Dublin region.",
+    "url": "https://dgtlinfra.com/data-centers-dublin-ireland/"
+  },
+  {
+    "name": "Singapore Hub",
+    "region": "Singapore",
+    "lat": 1.352,
+    "lng": 103.819,
+    "capacity_mw": 1200,
+    "dc_count_approx": 70,
+    "headline": "Southeast Asia's internet hub",
+    "notes": "Handles the vast majority of Southeast Asia's internet traffic. Multiple major submarine cables land here. Singapore imposed a 3-year moratorium on new data centers (2019–2022) due to land and power constraints; capacity has been carefully rationed since. Highest colocation pricing globally ($330–475/kW/month).",
+    "url": "https://en.wikipedia.org/wiki/Internet_in_Singapore"
+  },
+  {
+    "name": "Tokyo Cluster",
+    "region": "Tokyo / Osaka, Japan",
+    "lat": 35.689,
+    "lng": 139.691,
+    "capacity_mw": 1800,
+    "dc_count_approx": 180,
+    "headline": "Asia-Pacific's largest data center market",
+    "notes": "Among the top 5 largest global data center markets by power capacity. Japan's enterprise culture, financial sector, and gaming industry sustain dense local demand. Osaka is a key secondary hub providing disaster-recovery resilience for Tokyo.",
+    "url": "https://dgtlinfra.com/data-centers-tokyo-japan/"
+  },
+  {
+    "name": "Hong Kong Cluster",
+    "region": "Hong Kong",
+    "lat": 22.319,
+    "lng": 114.169,
+    "capacity_mw": 500,
+    "dc_count_approx": 60,
+    "headline": "Asia's historical internet gateway",
+    "notes": "Long the primary internet hub for Asia due to submarine cable convergence and financial center status. Growth has slowed since 2020 amid political uncertainty; Singapore and Tokyo have absorbed much of the regional hyperscaler expansion.",
+    "url": "https://dgtlinfra.com/data-centers-hong-kong/"
+  }
+]
