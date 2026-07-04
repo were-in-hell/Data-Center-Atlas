@@ -107,6 +107,10 @@ select option{background:#0b0f1a}
 .rs{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);flex-shrink:0}
 .req{display:flex;align-items:center;gap:5px;margin-top:4px;font-size:10px;color:var(--muted);cursor:pointer}
 .req input{accent-color:var(--cyan);cursor:pointer}
+.dc-btns{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.dc-btn{padding:3px 9px;border:1px solid var(--bdr);background:transparent;color:var(--muted);border-radius:4px;cursor:pointer;font-size:10px;font-family:'IBM Plex Mono',monospace;transition:background .15s,color .15s}
+.dc-btn:hover:not(.active){background:rgba(255,255,255,.07);color:var(--text)}
+.dc-btn.active{background:var(--cyan);color:#000;border-color:var(--cyan);font-weight:600}
 
 /* ── Popup ── */
 #popup{position:fixed;z-index:1800;display:none;min-width:300px;max-width:360px;background:#0d1520;border:1px solid var(--bdr);border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.85);max-height:calc(100vh - 80px);overflow-y:auto}
@@ -298,10 +302,16 @@ select option{background:#0b0f1a}
       </label>
       <div class="lg-sub" style="margin-top:5px">Turning this on also switches the filter above to &#8805;220 kV, so only backbone-tier lines are left on the map &mdash; far less to wade through, and what's left is plausibly relevant to a gigawatt campus.</div>
       <hr class="pdiv" style="margin:7px 0"/>
-      <div class="lg-sub">Data-center density filter &mdash; hides lines, substations and plants with fewer than this many data centers (any kind, full ~10.5k-record dataset, not just AI) within the proximity radius above. Same caveat as everywhere else here: this is geographic closeness, not a wiring diagram.</div>
-      <div class="rr" style="margin-top:5px">
-        <input type="range" id="dc-density-filter" min="0" max="500" step="5" value="0" style="flex:1"/>
-        <span class="rs" id="dc-density-readout" style="min-width:46px;text-align:right">Off</span>
+      <div class="lg-sub">Data-center density filter &mdash; hides lines, substations and plants with fewer than the selected number of data centers (any kind, full ~10.5k-record dataset, not just AI) within the proximity radius above. Geographic closeness only &mdash; not a wiring diagram.</div>
+      <div class="dc-btns" id="dc-density-btns">
+        <button class="dc-btn" data-val="0" data-max="0">No DCs</button>
+        <button class="dc-btn active" data-val="0">All</button>
+        <button class="dc-btn" data-val="10">10+</button>
+        <button class="dc-btn" data-val="25">25+</button>
+        <button class="dc-btn" data-val="50">50+</button>
+        <button class="dc-btn" data-val="100">100+</button>
+        <button class="dc-btn" data-val="200">200+</button>
+        <button class="dc-btn" data-val="300">300+</button>
       </div>
     </div>
   </div>
@@ -827,6 +837,14 @@ window.addEventListener('load', function () {
       for (const stamp in renderer._layers) processPowerFeature(renderer._layers[stamp], null, center);
     } catch (err) { /* defensive */ }
   });
+  powerLayer.on('tileunload', e => {
+    try {
+      const key = powerLayer._tileCoordsToKey(e.coords);
+      const renderer = powerLayer._vectorTiles && powerLayer._vectorTiles[key];
+      if (!renderer || !renderer._layers) return;
+      for (const stamp in renderer._layers) allPowerFeatures.delete(renderer._layers[stamp]);
+    } catch (err) { /* defensive */ }
+  });
 
   // VectorGrid click events do NOT include a "which source-layer was this"
   // field (no e.layerName) - the only thing reliably on the event is e.layer,
@@ -938,12 +956,14 @@ window.addEventListener('load', function () {
     if (aiCatchmentVisible) rebuildAiCatchment();
     reprocessAllLoadedPowerFeatures({ recomputeDistance: true });
   });
-  document.getElementById('dc-density-filter').addEventListener('input', e => {
-    dcDensityThreshold = parseInt(e.target.value, 10) || 0;
-    document.getElementById('dc-density-readout').textContent = dcDensityThreshold === 0 ? 'Off' : ('≥' + dcDensityThreshold);
-    // _dcCount is already cached on every feature from the initial load —
-    // just re-apply visibility against the new threshold, no recomputation.
-    reprocessAllLoadedPowerFeatures();
+  document.getElementById('dc-density-btns').addEventListener('click', e => {
+    const btn = e.target.closest('.dc-btn');
+    if (!btn) return;
+    document.querySelectorAll('.dc-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    dcDensityThreshold = parseInt(btn.dataset.val, 10) || 0;
+    dcDensityMax = btn.dataset.max !== undefined ? parseInt(btn.dataset.max, 10) : Infinity;
+    applyDensityFilter();
   });
   document.getElementById('ai-catchment-toggle').addEventListener('change', e => {
     aiCatchmentVisible = e.target.checked;
@@ -1037,7 +1057,10 @@ window.addEventListener('load', function () {
   // real coordinates. Everything here is wrapped defensively: if these
   // internals ever shift in a library update, the filter just stops doing
   // anything instead of breaking the rest of the page.
-  let dcDensityThreshold = 0;
+  let dcDensityThreshold = 0, dcDensityMax = Infinity;
+  // Global registry of every processed power feature — avoids re-traversing
+  // nested tile objects on each filter change. Cleaned up on tileunload.
+  const allPowerFeatures = new Set();
   function getFeatureRepresentativePoint(layer) {
     try {
       if (typeof layer.getLatLng === 'function') return layer.getLatLng();
@@ -1052,12 +1075,21 @@ window.addEventListener('load', function () {
   function applyDensityVisibility(layer) {
     if (!layer || layer === selectedPowerLayer || layer._dcCount == null) return;
     try {
-      if (layer._dcCount < dcDensityThreshold) {
+      const shouldHide = layer._dcCount < dcDensityThreshold || layer._dcCount > dcDensityMax;
+      // Skip setStyle entirely if the visibility state hasn't changed.
+      if (shouldHide && !layer._densityHidden) {
         layer.setStyle(hide());
-      } else if (layer._origStyleSnapshot) {
-        layer.setStyle(layer._origStyleSnapshot);
+        layer._densityHidden = true;
+      } else if (!shouldHide && layer._densityHidden) {
+        if (layer._origStyleSnapshot) layer.setStyle(layer._origStyleSnapshot);
+        layer._densityHidden = false;
       }
     } catch (err) { /* tile may have unloaded mid-update */ }
+  }
+  // Fast path for filter-only changes: iterates the global feature registry
+  // instead of re-traversing the nested tile→renderer→layer object graph.
+  function applyDensityFilter() {
+    allPowerFeatures.forEach(layer => applyDensityVisibility(layer));
   }
   // center is a Leaflet LatLng (tile geographic center) passed in from the
   // tileload handler or reprocessAllLoadedPowerFeatures. Using the tile center
@@ -1068,9 +1100,11 @@ window.addEventListener('load', function () {
       // Snapshot original style only once — before any hide() call can corrupt it.
       if (layer._dcCount == null) {
         layer._origStyleSnapshot = Object.assign({}, layer.options);
+        allPowerFeatures.add(layer); // register in global registry on first encounter
       }
       if (layer._dcCount == null || (opts && opts.recomputeDistance)) {
         layer._dcCount = center ? countDcNear(center.lat, center.lng, aiRadiusKm) : 0;
+        layer._densityHidden = undefined; // reset state so applyDensityVisibility re-evaluates
       }
       applyDensityVisibility(layer);
     } catch (err) { /* defensive - never let this break the map */ }
