@@ -1072,17 +1072,33 @@ window.addEventListener('load', function () {
     } catch (err) { /* ignore */ }
     return null;
   }
+  function densityFilterActive() {
+    return dcDensityThreshold > 0 || dcDensityMax < Infinity;
+  }
+  function boostedStyle(snap) {
+    // When a filter is active, make surviving lines thicker and fully opaque
+    // so they're visible at any zoom level.
+    return Object.assign({}, snap, {
+      weight:  Math.max((snap.weight || 1) * 2.5, 2.5),
+      opacity: 1,
+    });
+  }
   function applyDensityVisibility(layer) {
     if (!layer || layer === selectedPowerLayer || layer._dcCount == null) return;
     try {
       const shouldHide = layer._dcCount < dcDensityThreshold || layer._dcCount > dcDensityMax;
-      // Skip setStyle entirely if the visibility state hasn't changed.
-      if (shouldHide && !layer._densityHidden) {
-        layer.setStyle(hide());
-        layer._densityHidden = true;
-      } else if (!shouldHide && layer._densityHidden) {
-        if (layer._origStyleSnapshot) layer.setStyle(layer._origStyleSnapshot);
-        layer._densityHidden = false;
+      const active = densityFilterActive();
+      if (shouldHide) {
+        if (!layer._densityHidden) { layer.setStyle(hide()); layer._densityHidden = true; }
+      } else {
+        // Visible — apply boost if filter is active, original style if not.
+        // Re-apply whenever _densityBoosted doesn't match the current active state.
+        if (layer._densityHidden || layer._densityBoosted !== active) {
+          const snap = layer._origStyleSnapshot;
+          if (snap) layer.setStyle(active ? boostedStyle(snap) : snap);
+          layer._densityHidden = false;
+          layer._densityBoosted = active;
+        }
       }
     } catch (err) { /* tile may have unloaded mid-update */ }
   }
@@ -1104,7 +1120,7 @@ window.addEventListener('load', function () {
       }
       if (layer._dcCount == null || (opts && opts.recomputeDistance)) {
         layer._dcCount = center ? countDcNear(center.lat, center.lng, aiRadiusKm) : 0;
-        layer._densityHidden = undefined; // reset state so applyDensityVisibility re-evaluates
+        layer._densityHidden = undefined; layer._densityBoosted = undefined; // reset so applyDensityVisibility re-evaluates
       }
       applyDensityVisibility(layer);
     } catch (err) { /* defensive - never let this break the map */ }
