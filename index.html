@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
+<style id="dc-filter-style"></style>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
 <style>
 :root{--bg:#0b0f1a;--panel:rgba(11,15,26,0.94);--bdr:rgba(0,212,255,0.18);--cyan:#00d4ff;--green:#00ff88;--amber:#fbbf24;--red:#f87171;--text:#c8d6e5;--muted:#5a7085}
@@ -461,6 +462,14 @@ window.addEventListener('load', function () {
     document.getElementById('zoom-hint').style.display = z >= 9 ? 'none' : 'inline';
   }
   map.on('zoom', updateLegend);
+  // After every zoom, refresh DC counts for all loaded tiles. At higher zoom
+  // levels tiles are much smaller (zoom 14 = ~2.4 km wide vs zoom 8 = ~156 km),
+  // so the 5-sample approximation becomes essentially exact. Debounced so it
+  // only fires once the zoom animation has settled.
+  const _reprocessOnZoom = debounce(() => {
+    if (map.hasLayer(powerLayer)) reprocessAllLoadedPowerFeatures({ recomputeDistance: true });
+  }, 300);
+  map.on('zoomend', _reprocessOnZoom);
   updateLegend();
 
   // ── Popup ─────────────────────────────────────────────────────────────────
@@ -562,6 +571,10 @@ window.addEventListener('load', function () {
   }
   map.on('click', () => { popupEl.style.display = 'none'; clearPowerSelection(); });
 
+  function debounce(fn, ms) {
+    let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
   // ── Data ──────────────────────────────────────────────────────────────────
   let allPoints = [], allMarkers = [];
   let countries = new Set(), countryCounts = {};
@@ -626,6 +639,20 @@ window.addEventListener('load', function () {
       if (!map.hasLayer(clusterGroup)) map.addLayer(clusterGroup); // defensive re-add
       buildDcGridIndex();
       reprocessAllLoadedPowerFeatures({ recomputeDistance: true });
+
+      // Background-fetch popup details (description + image_url) — stripped from
+      // the main GeoJSON by optimize.py to cut initial load by ~70%.
+      // By the time a user clicks a marker the detail file is almost always ready.
+      fetch('datacenters_detail.json')
+        .then(r => r.ok ? r.json() : null)
+        .then(detail => {
+          if (!detail) return;
+          allPoints.forEach(d => {
+            const key = d.page_url || d.name;
+            if (key && detail[key]) Object.assign(d, detail[key]);
+          });
+        })
+        .catch(() => {}); // non-critical — popups just skip description/image if absent
 
       // Header
       document.getElementById('header-count').innerHTML =
@@ -818,23 +845,33 @@ window.addEventListener('load', function () {
   // We compute density using the tile's own geographic center (via unproject)
   // because VectorGrid's LineSymbolizer is initialised with empty latlngs —
   // getLatLngs() always returns [] so per-feature coordinate lookup fails.
-  // The tile-center approximation is accurate enough: at z≥7 tiles are
-  // ~300 km wide, so every feature in the tile gets the same DC density
-  // reading for that region, which is exactly what the filter needs.
-  function tileGeoCenter(coords) {
-    const tileSize = powerLayer.getTileSize();
-    const nwPx = L.point(coords.x, coords.y).scaleBy(tileSize);
-    const nw = map.unproject(nwPx, coords.z);
-    const se = map.unproject(nwPx.add(tileSize), coords.z);
-    return L.latLngBounds([nw, se]).getCenter();
+  // Sample 5 geographic points across a tile (center + 4 edge midpoints) and
+  // return the MAX DC count. Using just the tile center was causing false zeros:
+  // a line near the tile edge would get the center's count, which could be 0
+  // even when the line itself is surrounded by DCs.
+  function tileSampleDcCount(coords) {
+    try {
+      const tileSize = powerLayer.getTileSize();
+      const nwPx = L.point(coords.x, coords.y).scaleBy(tileSize);
+      const sePx = nwPx.add(tileSize);
+      const cPx  = nwPx.add(tileSize.divideBy(2));
+      const pts  = [
+        map.unproject(cPx,                      coords.z),  // center
+        map.unproject(L.point(cPx.x, nwPx.y),  coords.z),  // N mid
+        map.unproject(L.point(cPx.x, sePx.y),  coords.z),  // S mid
+        map.unproject(L.point(nwPx.x, cPx.y),  coords.z),  // W mid
+        map.unproject(L.point(sePx.x, cPx.y),  coords.z),  // E mid
+      ];
+      return Math.max(...pts.map(pt => countDcNear(pt.lat, pt.lng, aiRadiusKm)));
+    } catch (err) { return 0; }
   }
   powerLayer.on('tileload', e => {
     try {
       const key = powerLayer._tileCoordsToKey(e.coords);
       const renderer = powerLayer._vectorTiles && powerLayer._vectorTiles[key];
       if (!renderer || !renderer._layers) return;
-      const center = tileGeoCenter(e.coords);
-      for (const stamp in renderer._layers) processPowerFeature(renderer._layers[stamp], null, center);
+      const dcCount = tileSampleDcCount(e.coords);
+      for (const stamp in renderer._layers) processPowerFeature(renderer._layers[stamp], null, dcCount);
     } catch (err) { /* defensive */ }
   });
   powerLayer.on('tileunload', e => {
@@ -883,11 +920,9 @@ window.addEventListener('load', function () {
     if (layer) {
       try {
         if (layer._path) layer._path.classList.remove('power-line-selected');
-        // Restore through the density filter, not blindly back to its
-        // pre-selection look, so a line that's since fallen below the
-        // density threshold (or whose radius changed) ends up hidden
-        // again instead of reappearing.
-        applyDensityVisibility(layer);
+        // Restore to pre-click style. CSS bucket class already handles
+        // density visibility — no need to call applyDensityVisibility.
+        if (layer._origStyleSnapshot) layer.setStyle(layer._origStyleSnapshot);
       } catch (err) { /* tile may have unloaded already - nothing to clean up */ }
     }
     map.getContainer().classList.remove('power-dim-mode');
@@ -909,9 +944,9 @@ window.addEventListener('load', function () {
     if (e.layer.bringToFront) e.layer.bringToFront();
     map.getContainer().classList.add('power-dim-mode');
 
-    showPopup(buildPowerLinePopup(p, kind, latlng), cx, cy);
+    showPopup(buildPowerLinePopup(p, kind, latlng, e.layer), cx, cy);
     getAiClusters().then(() => {
-      if (popupEl.style.display === 'block') showPopup(buildPowerLinePopup(p, kind, latlng), cx, cy);
+      if (popupEl.style.display === 'block') showPopup(buildPowerLinePopup(p, kind, latlng, e.layer), cx, cy);
     });
   });
 
@@ -950,11 +985,12 @@ window.addEventListener('load', function () {
   function loadAiCatchment() {
     getAiClusters().then(() => { if (aiCatchmentVisible) rebuildAiCatchment(); }).catch(err => console.error(err));
   }
+  const _reprocessDebounced = debounce(() => reprocessAllLoadedPowerFeatures({ recomputeDistance: true }), 180);
   document.getElementById('ai-radius-slider').addEventListener('input', e => {
     aiRadiusKm = parseFloat(e.target.value) || 75;
     document.getElementById('ai-radius-readout').textContent = aiRadiusKm + ' km';
     if (aiCatchmentVisible) rebuildAiCatchment();
-    reprocessAllLoadedPowerFeatures({ recomputeDistance: true });
+    _reprocessDebounced(); // don't recompute tile DC counts on every drag pixel
   });
   document.getElementById('dc-density-btns').addEventListener('click', e => {
     const btn = e.target.closest('.dc-btn');
@@ -1058,8 +1094,29 @@ window.addEventListener('load', function () {
   // internals ever shift in a library update, the filter just stops doing
   // anything instead of breaking the rest of the page.
   let dcDensityThreshold = 0, dcDensityMax = Infinity;
-  // Global registry of every processed power feature — avoids re-traversing
-  // nested tile objects on each filter change. Cleaned up on tileunload.
+
+  // CSS bucket approach: each power-line SVG path gets a class like pw-dc-50
+  // matching which band its DC count falls in. The filter is a single CSS rule
+  // update (O(1)) — no per-feature setStyle on every slider/button change.
+  const DC_BUCKETS = [
+    {cls:'pw-dc-0',   min:0,   max:0},
+    {cls:'pw-dc-s',   min:1,   max:9},
+    {cls:'pw-dc-10',  min:10,  max:24},
+    {cls:'pw-dc-25',  min:25,  max:49},
+    {cls:'pw-dc-50',  min:50,  max:99},
+    {cls:'pw-dc-100', min:100, max:199},
+    {cls:'pw-dc-200', min:200, max:299},
+    {cls:'pw-dc-300', min:300, max:Infinity},
+  ];
+  const dcFilterStyleEl = document.getElementById('dc-filter-style');
+  function getDcBucketClass(count) {
+    for (let i = DC_BUCKETS.length - 1; i >= 0; i--) {
+      if (count >= DC_BUCKETS[i].min) return DC_BUCKETS[i].cls;
+    }
+    return 'pw-dc-0';
+  }
+  // Global registry — still needed so reprocessAllLoadedPowerFeatures can
+  // update CSS classes when the proximity radius changes.
   const allPowerFeatures = new Set();
   function getFeatureRepresentativePoint(layer) {
     try {
@@ -1072,58 +1129,44 @@ window.addEventListener('load', function () {
     } catch (err) { /* ignore */ }
     return null;
   }
-  function densityFilterActive() {
-    return dcDensityThreshold > 0 || dcDensityMax < Infinity;
-  }
-  function boostedStyle(snap) {
-    // When a filter is active, make surviving lines thicker and fully opaque
-    // so they're visible at any zoom level.
-    return Object.assign({}, snap, {
-      weight:  Math.max((snap.weight || 1) * 2.5, 2.5),
-      opacity: 1,
-    });
-  }
-  function applyDensityVisibility(layer) {
-    if (!layer || layer === selectedPowerLayer || layer._dcCount == null) return;
-    try {
-      const shouldHide = layer._dcCount < dcDensityThreshold || layer._dcCount > dcDensityMax;
-      const active = densityFilterActive();
-      if (shouldHide) {
-        if (!layer._densityHidden) { layer.setStyle(hide()); layer._densityHidden = true; }
-      } else {
-        // Visible — apply boost if filter is active, original style if not.
-        // Re-apply whenever _densityBoosted doesn't match the current active state.
-        if (layer._densityHidden || layer._densityBoosted !== active) {
-          const snap = layer._origStyleSnapshot;
-          if (snap) layer.setStyle(active ? boostedStyle(snap) : snap);
-          layer._densityHidden = false;
-          layer._densityBoosted = active;
-        }
-      }
-    } catch (err) { /* tile may have unloaded mid-update */ }
-  }
-  // Fast path for filter-only changes: iterates the global feature registry
-  // instead of re-traversing the nested tile→renderer→layer object graph.
+  // O(1) filter: update a single CSS rule that hides/shows entire bucket classes.
+  // No per-feature JS work — the browser's style engine does all the matching.
   function applyDensityFilter() {
-    allPowerFeatures.forEach(layer => applyDensityVisibility(layer));
+    const active = dcDensityThreshold > 0 || dcDensityMax < Infinity;
+    const hidden = DC_BUCKETS.filter(b => b.max < dcDensityThreshold || b.min > dcDensityMax);
+    const shown  = DC_BUCKETS.filter(b => b.max >= dcDensityThreshold && b.min <= dcDensityMax);
+    const parts  = [];
+    if (hidden.length)
+      parts.push(hidden.map(b => '.' + b.cls).join(',') + '{visibility:hidden!important}');
+    if (active && shown.length)
+      parts.push(shown.map(b => '.' + b.cls).join(',') +
+        '{stroke-width:2.5px!important;stroke-opacity:1!important}');
+    dcFilterStyleEl.textContent = parts.join('\n');
   }
   // center is a Leaflet LatLng (tile geographic center) passed in from the
   // tileload handler or reprocessAllLoadedPowerFeatures. Using the tile center
   // avoids the getLatLngs() trap: VectorGrid's LineSymbolizer is initialised
   // with [], so per-feature coordinate lookups always return null.
-  function processPowerFeature(layer, opts, center) {
+  function assignDcBucketClass(layer) {
+    if (!layer._path) return;
+    DC_BUCKETS.forEach(b => layer._path.classList.remove(b.cls));
+    layer._path.classList.add(getDcBucketClass(layer._dcCount));
+  }
+  // dcCount is the precomputed tile max-sample count (a number, not a LatLng).
+  // Callers run tileSampleDcCount() once per tile and pass the result here for
+  // every feature in that tile.
+  function processPowerFeature(layer, opts, dcCount) {
     try {
-      // Snapshot original style only once — before any hide() call can corrupt it.
       if (layer._dcCount == null) {
         layer._origStyleSnapshot = Object.assign({}, layer.options);
-        allPowerFeatures.add(layer); // register in global registry on first encounter
+        allPowerFeatures.add(layer);
       }
       if (layer._dcCount == null || (opts && opts.recomputeDistance)) {
-        layer._dcCount = center ? countDcNear(center.lat, center.lng, aiRadiusKm) : 0;
-        layer._densityHidden = undefined; layer._densityBoosted = undefined; // reset so applyDensityVisibility re-evaluates
+        layer._dcCount = dcCount ?? 0;
       }
-      applyDensityVisibility(layer);
-    } catch (err) { /* defensive - never let this break the map */ }
+      // Assign CSS bucket class — filter CSS rule applies automatically, no setStyle needed.
+      assignDcBucketClass(layer);
+    } catch (err) { /* defensive */ }
   }
   function reprocessAllLoadedPowerFeatures(opts) {
     try {
@@ -1132,13 +1175,15 @@ window.addEventListener('load', function () {
       for (const key in tiles) {
         const renderer = tiles[key];
         if (!renderer || !renderer._layers) continue;
-        // Compute tile center from _tileCoords that VectorGrid sets in createTile
-        let center = null;
-        if (renderer._tileCoords) {
-          try { center = tileGeoCenter(renderer._tileCoords); } catch (e) {}
-        }
+        // Parse tile coords from the VectorGrid key ("x:y:z") — reliable
+        // regardless of which VectorGrid internal property name is used.
+        const parts = key.split(':');
+        const coords = parts.length === 3
+          ? { x: +parts[0], y: +parts[1], z: +parts[2] }
+          : null;
+        const dcCount = coords ? tileSampleDcCount(coords) : 0;
         for (const stamp in renderer._layers) {
-          processPowerFeature(renderer._layers[stamp], opts, center);
+          processPowerFeature(renderer._layers[stamp], opts, dcCount);
         }
       }
     } catch (err) { /* VectorGrid internals not what we expected - filter no-ops */ }
@@ -1169,7 +1214,7 @@ window.addEventListener('load', function () {
     if (p.tunnel) return 'Underground (tunnel)';
     return 'Overhead (no underground tag in OpenStreetMap — this is the default for power=line)';
   }
-  function buildPowerLinePopup(p, kind, latlng) {
+  function buildPowerLinePopup(p, kind, latlng, layer) {
     const noun = powerNoun(p, kind);
     const title = p.name || p.ref || `Unnamed ${noun.toLowerCase()}`;
     const voltage = voltageLabel(p);
@@ -1196,6 +1241,12 @@ window.addEventListener('load', function () {
     if (allPoints.length) {
       const dcCount = allPoints.reduce((n, d) => n + (haversineKm(latlng.lat, latlng.lng, d.lat, d.lng) <= aiRadiusKm ? 1 : 0), 0);
       dcDensityRow = `<div class="pr"><div class="prl">DC DENSITY</div><div class="prv">${dcCount.toLocaleString()} data center${dcCount===1?'':'s'} of any kind within ${aiRadiusKm} km</div></div>`;
+      // The popup has the accurate count from the real click position — write it
+      // back so the filter uses the same number rather than the tile approximation.
+      if (layer && layer._dcCount !== dcCount) {
+        layer._dcCount = dcCount;
+        assignDcBucketClass(layer);
+      }
     }
 
     return `<button class="px" onclick="document.getElementById('popup').style.display='none'">&#215;</button>
@@ -1461,7 +1512,8 @@ window.addEventListener('load', function () {
     applyFilters();
   });
   document.getElementById('spec-toggle').addEventListener('click',function(){this.classList.toggle('open');document.getElementById('spec-panel').classList.toggle('open');});
-  ['space-min','space-max','colo-min','colo-max','power-min','power-max'].forEach(id=>document.getElementById(id).addEventListener('input',applyFilters));
+  const _applyFiltersDebounced = debounce(applyFilters, 160);
+  ['space-min','space-max','colo-min','colo-max','power-min','power-max'].forEach(id=>document.getElementById(id).addEventListener('input',_applyFiltersDebounced));
   ['space-req','colo-req','power-req'].forEach(id=>document.getElementById(id).addEventListener('change',applyFilters));
   document.getElementById('reset-btn').addEventListener('click',()=>{
     searchEl.value='';activeSearch='';activeCountry='';hyperscaleOnly=false;clearBtn.style.display='none';closeDD();
