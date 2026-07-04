@@ -300,7 +300,7 @@ select option{background:#0b0f1a}
       <hr class="pdiv" style="margin:7px 0"/>
       <div class="lg-sub">Data-center density filter &mdash; hides lines, substations and plants with fewer than this many data centers (any kind, full ~10.5k-record dataset, not just AI) within the proximity radius above. Same caveat as everywhere else here: this is geographic closeness, not a wiring diagram.</div>
       <div class="rr" style="margin-top:5px">
-        <input type="range" id="dc-density-filter" min="0" max="200" step="5" value="0" style="flex:1"/>
+        <input type="range" id="dc-density-filter" min="0" max="500" step="5" value="0" style="flex:1"/>
         <span class="rs" id="dc-density-readout" style="min-width:46px;text-align:right">Off</span>
       </div>
     </div>
@@ -805,16 +805,26 @@ window.addEventListener('load', function () {
   });
 
   // Reprocess a tile's features for the density filter as soon as it loads.
-  // (processPowerFeature/reprocessAllLoadedPowerFeatures are defined further
-  // down, but as function declarations they're hoisted, so referencing them
-  // here is safe - this listener only ever fires later, after the whole
-  // script has finished running once.)
+  // We compute density using the tile's own geographic center (via unproject)
+  // because VectorGrid's LineSymbolizer is initialised with empty latlngs —
+  // getLatLngs() always returns [] so per-feature coordinate lookup fails.
+  // The tile-center approximation is accurate enough: at z≥7 tiles are
+  // ~300 km wide, so every feature in the tile gets the same DC density
+  // reading for that region, which is exactly what the filter needs.
+  function tileGeoCenter(coords) {
+    const tileSize = powerLayer.getTileSize();
+    const nwPx = L.point(coords.x, coords.y).scaleBy(tileSize);
+    const nw = map.unproject(nwPx, coords.z);
+    const se = map.unproject(nwPx.add(tileSize), coords.z);
+    return L.latLngBounds([nw, se]).getCenter();
+  }
   powerLayer.on('tileload', e => {
     try {
       const key = powerLayer._tileCoordsToKey(e.coords);
       const renderer = powerLayer._vectorTiles && powerLayer._vectorTiles[key];
       if (!renderer || !renderer._layers) return;
-      for (const stamp in renderer._layers) processPowerFeature(renderer._layers[stamp]);
+      const center = tileGeoCenter(e.coords);
+      for (const stamp in renderer._layers) processPowerFeature(renderer._layers[stamp], null, center);
     } catch (err) { /* defensive */ }
   });
 
@@ -1049,18 +1059,18 @@ window.addEventListener('load', function () {
       }
     } catch (err) { /* tile may have unloaded mid-update */ }
   }
-  function processPowerFeature(layer, opts) {
+  // center is a Leaflet LatLng (tile geographic center) passed in from the
+  // tileload handler or reprocessAllLoadedPowerFeatures. Using the tile center
+  // avoids the getLatLngs() trap: VectorGrid's LineSymbolizer is initialised
+  // with [], so per-feature coordinate lookups always return null.
+  function processPowerFeature(layer, opts, center) {
     try {
-      // Capture the original style only once — on the very first encounter,
-      // when the VectorGrid-applied style is still intact and unhidden.
-      // Never re-snapshot on recomputes: the layer may already be hidden,
-      // which would make the snapshot useless for restoring it later.
+      // Snapshot original style only once — before any hide() call can corrupt it.
       if (layer._dcCount == null) {
         layer._origStyleSnapshot = Object.assign({}, layer.options);
       }
       if (layer._dcCount == null || (opts && opts.recomputeDistance)) {
-        const pt = getFeatureRepresentativePoint(layer);
-        layer._dcCount = pt ? countDcNear(pt.lat, pt.lng, aiRadiusKm) : 0;
+        layer._dcCount = center ? countDcNear(center.lat, center.lng, aiRadiusKm) : 0;
       }
       applyDensityVisibility(layer);
     } catch (err) { /* defensive - never let this break the map */ }
@@ -1072,8 +1082,13 @@ window.addEventListener('load', function () {
       for (const key in tiles) {
         const renderer = tiles[key];
         if (!renderer || !renderer._layers) continue;
+        // Compute tile center from _tileCoords that VectorGrid sets in createTile
+        let center = null;
+        if (renderer._tileCoords) {
+          try { center = tileGeoCenter(renderer._tileCoords); } catch (e) {}
+        }
         for (const stamp in renderer._layers) {
-          processPowerFeature(renderer._layers[stamp], opts);
+          processPowerFeature(renderer._layers[stamp], opts, center);
         }
       }
     } catch (err) { /* VectorGrid internals not what we expected - filter no-ops */ }
